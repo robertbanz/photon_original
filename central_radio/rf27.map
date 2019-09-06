@@ -1,0 +1,33 @@
+               MICROTEC LODZ80 V4.2                          
+ 
+ 
+   **LOADER COMMANDS
+ 
+ 
+ CODE 0
+ STACK 207FH
+ LOAD RF27
+ END
+  **LOAD MAP**
+ 
+     MODULE             CODE  DATA  EXTRA
+ 
+     RF27               0000  0000  0000
+     //                 026D  0000  0000
+     STACK              207F
+     //                 207F
+     MEMORY             0000
+     //                 0000
+
+   **PUBLIC SYMBOLS TABLE
+ 
+ 
+ STKSZ         0000     
+ 
+ 
+   **ENTRY POINT    0000H
+ 
+ 
+   **LOAD COMPLETED
+
+

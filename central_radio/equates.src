@@ -1,0 +1,172 @@
+
+
+        ;SPOD16		OLD SOUND BD
+        ;DATE: 2-28-87
+ 	;10-6-86 DSe ALPHA/OMEGA OR BETA POD
+	;2-28-87  IM_HIT EQU IO+41
+
+
+;******************************************************************
+;       BIT 7     HIGH=INFARED ON    LOW=INFARED OFF
+;       BIT 6     HIGH=STUN COLOR    LOW=TEAM COLOR 
+;       BIT 5     HIGH=NO IR RESET   LOW=RESET IR RDA
+;       BIT 4     HIGH=XMIT OFF      LOW=XMIT ON
+;       BIT 3     HIGH=RFMR RESET    LOW=NO MR RESET
+;       BIT 2     HIGH=NO RDA RESET  LOW=RFRDA RESET
+;       BIT 1     HIGH=GREEN LED ON  LOW=GREEN LED OFF
+;       BIT 0     HIGH=HELMET OFF    LOW=HELMET ON
+;******************************************************************
+
+
+CONTROL	EQU     1000H   ;I/O CONTROL LATCH                      
+RAM1    EQU     2000H   ;        
+RAM2    EQU     4000H   ;         
+RFSTAT  EQU     8000H   ;BIT0-/BF BIT1-TRIG BIT2-TEOC 
+			;BIT3-RFRDA BIT4-IRRDA
+XMITRF  EQU     9000H   ;                 
+RECVRF  EQU     XMITRF  ;
+
+STK	EQU     207FH
+
+	;---- RAM LOCATIONS ---- 
+IO	EQU     RAM1 
+
+        ;DATA INPUTTED VIA ENTRY TERMINAL (SEE GUN)
+SYNC1	EQU     IO+1 
+SYNC2	EQU     IO+2
+CODE            EQU     IO+3
+SLOT            EQU     IO+4
+GAMETYPE        EQU     IO+5
+CKBYTE          EQU     IO+6
+
+	;TRIGGER HANDLER
+HITCNTR         EQU     IO+7
+THISHIT         EQU     IO+8
+LASTHIT         EQU     IO+9
+
+	;TRIGGER HANDLER & G2T1
+
+TXOPPONENT      EQU     IO+10
+TXBASE          EQU     IO+11
+TXTOWER         EQU     IO+12
+TXTARGET        EQU     IO+13
+
+	;G2T1
+
+HITOPPONENT     EQU     IO+14
+HITFRIEND       EQU     IO+15
+HITOBJECT       EQU     IO+16
+
+SLOTCN          EQU     IO+17
+TASK            EQU     IO+18
+NEXTASK         EQU     IO+19
+TASKREQ         EQU     IO+20
+
+SYNCMISSED      EQU     IO+21
+DCNTR           EQU     IO+22
+GOTHIT          EQU     IO+23
+ECNTR           EQU     IO+24
+FTASK           EQU     IO+25
+
+TRIGTIME        EQU     IO+26
+NOTAVAIL        EQU     IO+27
+TXFRIEND        EQU     IO+28
+OBJECT          EQU     IO+29
+RFDATA          EQU     IO+30
+SYSREQ          EQU     IO+31
+
+RCVDSYNC        EQU     IO+32
+PODHIT          EQU     IO+33
+ESTATUS         EQU     IO+34
+PCNTR           EQU     IO+35
+GCNTR           EQU     IO+36
+SYSTYPE		EQU	IO+37	;E0h = alpha/omega	10/1/86
+				;C0h = beta		10/6/86
+HITS_IN		EQU	IO+38	;accumalative hits in 10/1/86
+HITS_OUT	EQU	IO+39	;accumalative hits out 10/1/86
+DSRPT_TIME	EQU	IO+40	;disrt time 10/1/86
+IM_HIT		EQU	IO+41	;see TRIG	2-28-87
+
+PTA             EQU     20H     ;IR RECVD DATA
+PTB             EQU     21H      
+PTC             EQU     22H      
+DDRA            EQU     24H        
+DDRB            EQU     25H        
+DDRC            EQU     26H        
+MDR             EQU     27H      
+T0LSB           EQU     30H                           
+T0MSB           EQU     31H                 
+T1LSB           EQU     32H      
+T1MSB           EQU     33H      
+STPT0           EQU     34H      
+STRT0           EQU     35H      
+STPT1           EQU     36H      
+STRT1           EQU     37H      
+T0MD            EQU     38H        
+T1MD            EQU     39H         
+PTAS            EQU     40H      
+PTBS            EQU     41H      
+PTCS            EQU     42H      
+DDRAS           EQU     44H        
+DDRBS           EQU     45H        
+DDRCS           EQU     46H        
+MDRS            EQU     47H        
+T0LSBS          EQU     50H       
+T0MSBS          EQU     51H      
+T1LSBS          EQU     52H      
+T1MSBS          EQU     53H      
+STPT0S          EQU     54H      
+STRT0S          EQU     55H      
+STPT1S          EQU     56H      
+STRT1S          EQU     57H      
+T0MDS           EQU     58H      
+T1MDS           EQU     59H      
+
+        ;---- OBJECTS
+
+RBASE           EQU     035H     
+RBASE2		EQU	036H		;10/1/86
+GBASE           EQU     02BH
+GBASE2		EQU	02DH		;10/1/86     
+RTOWER          EQU     032H     
+GTOWER          EQU     024H     
+TARGET          EQU     038H     
+
+        ;---- TASKS
+
+PSYNC           EQU     0C5H     
+GSYNC           EQU     0CAH     
+DSYNC           EQU     0BBH     
+ESYNC           EQU     0DDH      
+RSYNC           EQU     0AAH     
+GENTRY          EQU     0CCH
+
+        ;---- STATES
+
+PREGAME         EQU     01H
+GAME            EQU     02H
+DISRUPT         EQU     03H
+
+        ;---- GAME TYPES
+
+PUBIC           EQU     0E1H     
+LEAGUE          EQU     0E2H     
+FFA             EQU     0E3H     
+
+REDALPHA        EQU     40H      
+REDOMEGA        EQU     41H      
+GRNALPHA        EQU     80H      
+GRNOMEGA        EQU     81H      
+RED             EQU     40H      
+GRN             EQU     80H      
+
+        ;----- ECHO CODES
+
+SMISS   EQU 0B0H        ;MISSED SYNC
+PRCVD   EQU 0B5H        ;RECVD PSYNC
+ERCVD   EQU 0BAH        ;RECVD ESYNC
+SERROR  EQU 0BFH        ;UNKN SYNC RECVD
+EALARM  EQU 0BBH        ;ECNTR WAS INCREMENTED
+
+
+

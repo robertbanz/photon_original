@@ -1,0 +1,401 @@
+
+
+	NAME  RF27 DSe
+	LIST	E
+	NLIST	M,R,T,X
+
+
+;	****************************************************
+;	****						****
+;	****	      CENTRAL RADIO TEST		****
+;	****						****
+;	****************************************************
+
+
+
+;REVISION LOG:
+
+
+	FILE	EQUATES.SRC
+         
+;--------------------------------       
+;       POWER-UP COLDSTART       
+;--------------------------------
+ 
+        CSEG
+
+COLDSTART:      JP INITSYSTEM
+
+;--------------------------------               
+; RSTC    TIMER 1      16.3 MS    
+;--------------------------------        
+
+	ORG 002CH
+RSTC:	JP      TIMER1       
+
+;--------------------------------               
+;            RSTB                
+;   RF DATA RECEIVED INTERRUPT   
+;--------------------------------         
+ 
+	ORG 0034H
+RSTB:	EI
+	RET
+
+;--------------------------------               
+; RSTA    TIMER 0     16.3 MS     
+;--------------------------------          
+ 
+	ORG 003CH
+RSTA:   JP      TIMER0
+
+
+
+;--------------------------------               
+;     SYSTEM INITIALIZATION      
+;--------------------------------        
+
+ 
+	ORG 0100H
+ 
+INITSYSTEM:
+        DI
+
+        ;---- INIT 810's
+
+        XOR     A                            
+        OUT     (MDRS),A                      
+        OUT     (DDRA),A                                    
+        OUT     (T0MD),A                                       
+        OUT     (T1MD),A                                     
+        OUT     (T0MDS),A                                       
+        OUT     (T1MDS),A                                     
+        INC     A                
+        OUT     (MDR),A          
+        LD      A,6              
+        OUT     (T0MD),A         
+        OUT     (T1MD),A         
+        OUT     (T0MDS),A        
+        OUT     (T1MDS),A        
+        RRCA                     
+        OUT     (DDRBS),A                                  
+        LD      A,023H           
+        OUT     (DDRC),A                                   
+        LD      A,020H           
+        OUT     (DDRCS),A                                     
+        LD      A,0FFH           
+        OUT     (DDRB),A         
+        LD      A,0FFH           
+        OUT     (DDRAS),A        
+
+        ;---- ZERO RAM 
+
+        LD      HL,RAM1          
+        LD      B,080H           
+INIT1:  LD      (HL),0           
+        INC     HL               
+        DJNZ    INIT1            
+
+        LD      HL,RAM2          
+        LD      B,080H           
+INIT2:  LD      (HL),0           
+        INC     HL               
+        DJNZ    INIT2            
+
+        ;---- SET STACK POINTER
+        LD SP,STACK
+
+        ;---- SET CONTROL LATCH
+        LD A,3BH
+
+	SET 1,A		;LED on
+        LD (CONTROL),A
+
+        CALL    IROFF
+        CALL    IRRST
+
+	CALL SYNCTIMERS
+
+	CALL TXMTON
+
+        ;---- DISABLE RF INTR
+        ;---- ENABLE TIMERS 0 & 1 INTRS
+        LD A,0AH
+        OUT (0BBH),A
+
+        EI
+
+;XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+;XXXX                                  XXXX
+;XXXX      	FOREGROUND 	       XXXX
+;XXXX                                  XXXX
+;XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+
+FOREGND:
+	JP FOREGND
+
+
+;-------------------------------- 
+;           SYNC TIMERS          
+;CALLED BY:SYNC
+;-------------------------------- 
+
+SYNCTIMERS:
+        ;RE-LOAD TIMER 0
+
+        XOR     A               ;STOP & RESET TIMER 0
+        OUT     (T0MD),A         
+        LD      A,6             ;SET TIMER TO MODE 6
+        OUT     (T0MD),A         
+        LD      A,039H          ;LOAD LSB
+        OUT     (T0LSB),A        
+        LD      A,1             ;LOAD MSB
+        OUT     (T0MSB),A        
+
+        ;RE-LOAD TIMER 1
+
+        XOR     A               ;STOP & RESET TIMER 1
+        OUT     (T1MD),A         
+        LD      A,6             ;SET TIMER TO MODE 6
+        OUT     (T1MD),A         
+        LD      A,039H          ;LOAD LSB
+        OUT     (T1LSB),A        
+        LD      A,1             ;LOAD MSB
+        OUT     (T1MSB),A        
+
+        CALL    DELAY2           
+        OUT     (STRT0),A       ;START TIMER 0
+
+        CALL    DELAY4           
+        OUT     (STRT1),A       ;START TIMER 1
+
+        LD      A,1              
+        LD      (SLOTCN),A       
+
+        RET                      
+
+
+
+;**********************************************
+;***         TIMER 0 TASK PARSER            ***
+;**********************************************
+
+TIMER0:                           
+        PUSH    AF               
+        PUSH    BC               
+        PUSH    DE               
+        PUSH    HL               
+        PUSH    IX               
+        PUSH    IY               
+
+	CALL HNDTXMTR
+
+	POP     IY               
+        POP     IX               
+        POP     HL               
+        POP     DE               
+        POP     BC               
+        POP     AF               
+        EI                       
+        RET                      
+
+
+;-------------------------------
+;       HANDLE TXMTR ON/OFF
+;-------------------------------
+
+HNDTXMTR:
+        ;---- IF SLOTCN = 66, TXMTR ON
+        LD A,66
+        LD HL,SLOTCN
+        CP (HL)
+        JR NZ,HT_1
+        CALL TXMTON
+        RET
+
+        ;---- IF SLOTCN = 0, TXMTR OFF
+HT_1:   LD A,0
+        CP (HL)
+        CALL Z,TXMTOFF
+        RET
+
+
+;*****************************************
+;***       TIMER 1 TASK PARSER         ***
+;*****************************************
+
+TIMER1:                             
+        PUSH    AF               
+        PUSH    BC               
+        PUSH    DE               
+        PUSH    HL               
+        PUSH    IX               
+        PUSH    IY               
+
+        CALL    HNDSLOT          
+
+        LD A,(SLOTCN)
+        CP 0
+        JR NZ,T1RET
+
+	;ck trig: trig = GSYNC  /trig = PSYNC
+
+        LD A,(RFSTAT)
+        BIT 1,A
+        JR Z,SEND_PSYNC
+
+	LD A,GSYNC
+	CALL TXMTRF
+	JR T1RET
+
+SEND_PSYNC:
+	LD A,PSYNC
+	CALL TXMTRF
+
+
+T1RET:  POP     IY               
+        POP     IX               
+        POP     HL               
+        POP     DE               
+        POP     BC               
+        POP     AF               
+        EI                       
+        RET                      
+
+
+;--------------------------------        
+;        HANDLE  SLOT            
+;--------------------------------           
+
+HNDSLOT:                              
+        LD      HL,SLOTCN        
+        INC     (HL)             
+        LD      A,67             
+        CP      (HL)             
+        RET     NZ               
+ 
+        LD      (HL),0           
+        RET                      
+
+
+;--------------------------------        
+;        TRANSMITTER ON         
+;--------------------------------         
+
+TXMTON:
+        PUSH    AF
+        LD      A,(IO)
+        AND     0EFH
+        LD      (CONTROL),A
+        LD      (IO),A
+        POP     AF
+        RET
+
+;--------------------------------        
+;         TRANSMITTER OFF       
+;--------------------------------          
+
+TXMTOFF:
+        PUSH    AF
+        LD      A,(IO)
+        OR      10H             ;TURN BIT 4 ON                     
+        LD      (CONTROL),A
+        LD      (IO),A
+        POP     AF
+        RET
+
+;--------------------------------        
+;          RECEIVE RF           
+;--------------------------------         
+
+RCVRF: 
+        LD      A,(RECVRF)
+        LD      (RFDATA),A
+
+        RET
+
+;--------------------------------         
+;          TXMT RF              
+;--------------------------------         
+
+TXMTRF:
+        CALL    DELAY2
+        LD      (XMITRF),A
+        RET
+
+
+;--------------------------------         
+;           IR RESET             
+;--------------------------------          
+                                 
+IRRST:
+        PUSH    AF               
+
+        LD      A,(IO)            
+        AND     0DFH             
+
+        LD      (CONTROL),A      
+
+	NOP			;3-1-87
+	NOP
+	NOP
+
+        LD      A,(IO)           
+        LD      (CONTROL),A      
+
+        POP     AF               
+
+        RET                      
+
+;--------------------------------         
+;          POD IR OFF            
+;--------------------------------           
+
+IROFF:
+        PUSH    AF               
+        LD      A,(IO)           
+        AND     07FH             
+        LD      (CONTROL),A      
+        LD      (IO),A           
+        POP     AF               
+        RET                      
+
+
+;--------------------------------           
+;            DELAYS              
+;--------------------------------           
+
+DEL1K:  PUSH    BC               
+        PUSH    AF               
+        LD      BC,09D82H        
+        JP      DELAY            
+                                 
+DEL12:  PUSH    BC               
+        PUSH    AF                
+        LD      BC,01F0H         
+        JP      DELAY            
+
+DELAY2: PUSH    BC                  
+        PUSH    AF                   
+        LD      BC,004FH              
+        JP      DELAY                  
+
+DELAY4: PUSH    BC               
+        PUSH    AF               
+        LD      BC,009EH         
+DELAY:  XOR     A                
+DECLO:  CP      C                
+        JP      Z,DECHI          
+        DEC     BC               
+        JP      DECLO            
+DECHI:  CP      B                
+        JP      Z,POPOP          
+        DEC     BC               
+        JP      DECLO            
+POPOP:  POP     AF               
+        POP     BC                
+        RET                                                         
+
+
+
