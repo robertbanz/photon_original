@@ -1,6 +1,6 @@
 
 
-	NAME SPOD16 DSe
+	NAME SPOD16NS KWG
 	LIST	E
 	NLIST	M,R,T,X
 
@@ -44,7 +44,13 @@
 ;	IR read, thereby, causing restart of conseq object hits count.
 ;3-13-87
 ;	CLRALL: clear LASTHIT
-
+;4-22-87
+;	MAKE SPOD16.SRC 3-13-87 WORK WITH NEW SOUND BOARD
+;	-------------------------------------------------
+;	SYSTEM INIT & SOUND routines replaced with SYSTEM INIT & SOUND
+;	routines from SPOD15 (2-5-87/14:13).
+;	XBASE routine replaced with XBASE routine from SPOD15
+;	(2-5-87/14:13).	
 
 	FILE	EQUATES.SRC
          
@@ -80,43 +86,35 @@ RSTA:   JP      TIMER0
 
 
 
-;--------------------------------               
+;---------------------------------------------
 ;     SYSTEM INITIALIZATION      
-;2-28-87 old sound board init routine
-;--------------------------------        
-
+;4-22-87 new sound board init routines - KWG
+;---------------------------------------------        
  
 	ORG 0100H
  
 INITSYSTEM:
         DI
 
-        ;---- INIT 810's
+        ;---- INIT 810	1-30-87
 
         XOR     A                            
-        OUT     (MDRS),A                      
-        OUT     (DDRA),A                                    
-        OUT     (T0MD),A                                       
-        OUT     (T1MD),A                                     
-        OUT     (T0MDS),A                                       
-        OUT     (T1MDS),A                                     
-        INC     A                
-        OUT     (MDR),A          
-        LD      A,6              
+        OUT     (DDRA),A         ;PORT A SET AS INPUT
+        OUT     (T0MD),A
+        OUT     (T1MD),A
+        INC     A
+        OUT     (MDR),A          ;PORT A SET TO STROBED MODE INPUT
+
+        LD      A,6
         OUT     (T0MD),A         
         OUT     (T1MD),A         
-        OUT     (T0MDS),A        
-        OUT     (T1MDS),A        
-        RRCA                     
-        OUT     (DDRBS),A                                  
+
         LD      A,023H           
         OUT     (DDRC),A                                   
-        LD      A,020H           
-        OUT     (DDRCS),A                                     
+
         LD      A,0FFH           
         OUT     (DDRB),A         
-        LD      A,0FFH           
-        OUT     (DDRAS),A        
+
 
         ;---- ZERO RAM 
 
@@ -126,22 +124,18 @@ INIT1:  LD      (HL),0
         INC     HL               
         DJNZ    INIT1            
 
-        LD      HL,RAM2          
-        LD      B,080H           
-INIT2:  LD      (HL),0           
-        INC     HL               
-        DJNZ    INIT2            
+				;1-30-87 deleted clear RAM2 in 810
+				;on old sound board
 
         ;---- SET STACK POINTER
+
         LD SP,STACK
 
         ;---- SET CONTROL LATCH
+
         LD A,3BH
         LD (CONTROL),A
 
-        ;---- START BACKGROUND SOUNDS
-
-        CALL BACKGND             
 
 ;--------------------------------                   
 ;    CONFIGURE POD VIA E.T.           
@@ -1784,111 +1778,73 @@ DO_IMHIT:
 	RET
 
 
-;--------------------------------
-;        GAME SOUNDS
-;2-28-87 old sound bd routines             
-;--------------------------------          
+;---------------------------------------
+;            GAME SOUNDS             
+; 4-22-87 new sound board routines - KWG
+;---------------------------------------
+
+;---- BACK GROUND CONTINUOUS
 
 BACKGND:
-        PUSH    AF               
-        PUSH    BC               
-        PUSH    DE               
-        PUSH    HL               
-        LD      BC,0380H         
-        LD      DE,0090H         
-        LD      HL,0800H         
-        JP      SOUND            
+	CALL SND_RST
+	LD (HL),40H
+	CALL SND_WAIT
+	RET
+
+;---- REMAINING SOUNDS ONE TIME
 
 GOODHIT:
-        PUSH    AF               
-        PUSH    BC              ;GOOD HIT SOUND
-        PUSH    DE               
-        PUSH    HL               
-        LD      BC,0180H         
-        LD      DE,0060H         
-        LD      HL,9C02H         
-        CALL    SETSND           
-        POP     HL               
-        POP     DE               
-        LD      BC,0600H         
-DEL25:  DEC     C                
-        LD      A,C              
-        OR      A                
-        JP      NZ,DEL25         
-        DEC     B                
-        LD      A,B              
-        OR      A                
-        JP      NZ,DEL25         
-                                 
-        POP     BC               
-        XOR     A                
-        OUT     (PTBS),A         
-        POP     AF               
-        RET                      
+	CALL SND_RST
+	LD (HL),42H
+	CALL SND_WAIT
+	LD (HL),02H
+	CALL SND_WAIT
+	RET
 
 MISS:
-        PUSH    AF               
-        PUSH    BC               
-        PUSH    DE               
-        PUSH    HL               
-        LD      BC,0200H         
-        LD      DE,0040H         
-        LD      HL,0CC00H        
-	JP	SOUND
+	CALL SND_RST
+	LD (HL),41H
+	CALL SND_WAIT
+	LD (HL),01H
+	CALL SND_WAIT
+	RET
 
 HITOWN:                                
-        PUSH    AF               
-        PUSH    BC                
-        PUSH    DE                
-        PUSH    HL               
-        LD      BC,0180H         
-        LD      DE,0090H         
-        LD      HL,0EC00H        
-        JP      SOUND            
+	CALL SND_RST
+	LD (HL),43H
+	CALL SND_WAIT
+	LD (HL),03H
+	CALL SND_WAIT
+	RET
 
 IMHIT:                                
-        PUSH    AF               
-        PUSH    BC               
-        PUSH    DE               
-        PUSH    HL               
-        LD      BC,0110H         
-        LD      DE,0090H         
-        LD      HL,0AA00H        
-        JP      SOUND            
+	CALL SND_RST
+	LD (HL),44H
+	CALL SND_WAIT
+	LD (HL),04H
+	CALL SND_WAIT
+	RET
 
+E_BASE:
+	CALL SND_RST
+	LD (HL),45H
+	CALL SND_WAIT
+	LD (HL),05H
+	CALL SND_WAIT
+	RET
 
-SOUND:                             
-        CALL    SETSND           
-        POP     HL               
-        POP     DE               
-        POP     BC               
-        POP     AF               
-        RET                      
+SND_RST:
+	LD HL,SOUND
+	LD (HL),80H
+	CALL SND_WAIT
+	RET
 
-;-------  GAME SOUND SUPPORT SUB  --------
+SND_WAIT:
+	LD B,0FFH
+WAIT_LOOP:
+	DJNZ WAIT_LOOP
+	RET
 
-SETSND:                              
-        OUT     (STPT0S),A       
-        OUT     (STPT1S),A       
-        LD      A,03H            
-        OUT     (PTBS),A         
-        XOR     A                
-        OUT     (PTAS),A         
-        LD      A,C              
-        OUT     (T0LSBS),A       
-        LD      A,B              
-        OUT     (T0MSBS),A       
-        LD      A,E              
-        OUT     (T1LSBS),A       
-        LD      A,D              
-        OUT     (T1MSBS),A       
-        LD      A,H              
-        OUT     (PTAS),A         
-        OUT     (STRT0S),A       
-        OUT     (STRT1S),A        
-        LD      A,L              
-        OUT     (PTBS),A         
-        RET                      
 
 ;--------------------------------        
 ;         RESET RF UART         
@@ -2254,4 +2210,4 @@ PODID:  DB 0FFH         ;POD 1
         END
 
 
-
+

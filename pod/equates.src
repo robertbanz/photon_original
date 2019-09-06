@@ -1,10 +1,10 @@
 
 
-        ;SPOD16		OLD SOUND BD
-        ;DATE: 2-28-87
+        ;SPOD16NS	NEW SOUND BD
+        ;DATE: 4-22-87
  	;10-6-86 DSe ALPHA/OMEGA OR BETA POD
 	;2-28-87  IM_HIT EQU IO+41
-
+	;4-22-87  add SOUND equate fro use with new sound board - KWG
 
 ;******************************************************************
 ;       BIT 7     HIGH=INFARED ON    LOW=INFARED OFF
@@ -20,7 +20,7 @@
 
 CONTROL	EQU     1000H   ;I/O CONTROL LATCH                      
 RAM1    EQU     2000H   ;        
-RAM2    EQU     4000H   ;         
+SOUND   EQU     4000H   ;         
 RFSTAT  EQU     8000H   ;BIT0-/BF BIT1-TRIG BIT2-TEOC 
 			;BIT3-RFRDA BIT4-IRRDA
 XMITRF  EQU     9000H   ;                 
@@ -169,4 +169,4 @@ SERROR  EQU 0BFH        ;UNKN SYNC RECVD
 EALARM  EQU 0BBH        ;ECNTR WAS INCREMENTED
 
 
-
+
