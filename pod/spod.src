@@ -1,13 +1,49 @@
 
 
-	NAME SPOD14
+	NAME SPOD16 DSe
 	LIST	E
 	NLIST	M,R,T,X
 
 
-        ;DATE:  10-8-86 14:00  DSe
-	;ALPHA/OMEGA OR BETA POD
-	;variable disrupt time
+;	****************************************************
+;	****						****
+;	****	      ALPHA/OMEGA OR BETA POD		****
+;	****						****
+;	****************************************************
+
+
+;REVISION LOG:
+
+;1-30-87	variable disrupt time
+;2-5-87
+;2-9-87
+;2-28-87
+;	MAKE SPOD15.SRC 2-9-87 22:27 WORK WITH OLD SOUND BOARD
+;	------------------------------------------------------
+
+;	EQUATES.SRC 10-8-86 for old sound board
+;		added  IM_HIT EQU IO.41
+
+;	SPOD15.SRC 2-9-87 22:27
+;		SYSTEM INIT & SOUND routines replaced with
+;		SYSTEM INIT & sound routines from SPOD14 (GR20) 10-8-86 16:00
+;		XBASE: routine changed for old sound board
+
+;3-1-87
+;	GUN: if code = 80H change to 94H
+;	CODETBL: 80H changed to 94H
+
+;	GTRIG: ck for own code read
+
+;	GTRIG: at ---- READ ID & VALIDATE ----, added IRRST to
+;	cause RDA flag reset to high to stobe uart IR data into 810	
+;	on boards with C24 on sheet 2 of CPU LOGIC board shorted
+;3-12-87
+;	TRIG: via call DO_IMHIT, if pod disrupted and LASTHIT was object
+;	then clear LASTHIT to cause CKCNT: to clear HITCNTR on next valid
+;	IR read, thereby, causing restart of conseq object hits count.
+;3-13-87
+;	CLRALL: clear LASTHIT
 
 
 	FILE	EQUATES.SRC
@@ -42,9 +78,13 @@ RSTB:   JP      RFINTR
 	ORG 003CH
 RSTA:   JP      TIMER0
 
+
+
 ;--------------------------------               
 ;     SYSTEM INITIALIZATION      
+;2-28-87 old sound board init routine
 ;--------------------------------        
+
  
 	ORG 0100H
  
@@ -172,8 +212,17 @@ XORCHK:
         CP      B                 
         JP      NZ,GUN          ;BAD CHECKSUM           
 
-        ;---- VALIDATE CODE
+	;---- IF CODE = 80H, CHANGE TO 94H  3-1-87
 
+	LD A,(CODE)
+	CP 80H
+	JR NZ,CKCODE
+
+	LD A,94H
+	LD (CODE),A
+
+        ;---- VALIDATE CODE
+CKCODE:
         LD      A,(CODE)         
         LD      HL,CODETBL       
         CALL    TBLSEARCH                                    
@@ -188,6 +237,7 @@ XORCHK:
 	LD A,(GAMETYPE)
 	OR 0E0H
 	LD (GAMETYPE),A		;E1 = PUBLIC  E2 = LEAGUE  E3 = FFA
+
 
 NOLOAD:                          
         LD      A,(CODE)
@@ -217,6 +267,15 @@ NOLOAD:
 
 TRIG:   ;---- AWAIT TRIGGER PULL
 
+	;check for pod is hit set in RF_LISTEN 2-9-87
+
+	LD HL,IM_HIT
+	BIT 0,(HL)
+
+	CALL NZ,DO_IMHIT	;pod has been hit
+
+	;check for trigger pulled
+
         LD A,(RFSTAT)
         BIT 1,A
         JR Z,TRIG
@@ -226,6 +285,7 @@ TRIG:   ;---- AWAIT TRIGGER PULL
 	LD A,(SYSREQ)
 	CP DISRUPT
 	JR Z,TRIG
+
 
         ;---- PARSER TRIGGER TASK PER (TASK)
 
@@ -281,12 +341,21 @@ TG21:   ;---AWAIT TRIGGER PULL TIMEOUT OR IR DATA
 
         ;---- READ IR & VALIDATE
 
+	CALL	IRRST		;3-1-87 reset RDA flag causing uart data
+				;to be strobed into 810 
+
         IN      A,(PTA)
 
         LD (THISHIT),A
         LD      HL,CODETBL
         CALL    TBLSEARCH
         JR      C,TG2           ;IR DATA INVALID
+
+
+	LD	HL,THISHIT	;CK FOR OWN CODE	3-1-87
+	LD	A,(CODE)
+	CP	(HL)
+	JR	Z,TG2		;READ OWN CODE
 
 ;-------------------------------
 ;     PROCESS VALID IR CODE     
@@ -331,7 +400,7 @@ MEXIT:
 ACTION:
 	LD A,(SYSTYPE)
 	CP 0C0H
-	JP Z,BETA_ACTION	'do beta
+	JP Z,BETA_ACTION	;do beta
  
 ;-------------------------------------
 ;   PARSER PLAYER/PLAYER ACTION TASK  
@@ -643,7 +712,7 @@ OBJTBL: DB      34              ;# OF RECS IN TBL
         DW      XBASE
 
         DB      RED,PUBIC,GTOWER
-        DW      XBASE
+        DW      XTOWER			;2-5-87
 
         DB      RED,LEAGUE,GTOWER
         DW      XTOWER
@@ -679,7 +748,7 @@ OBJTBL: DB      34              ;# OF RECS IN TBL
         DW      XBASE
 
         DB      GRN,PUBIC,RTOWER
-        DW      XBASE
+        DW      XTOWER			;2-5-87
 
         DB      GRN,LEAGUE,RTOWER
         DW      XTOWER
@@ -790,18 +859,38 @@ X01:    CALL    MISS
 
 ;-------------------------------- 
 ;          XHIT BASE             
+;2-28-87 old sound board routine
 ;-------------------------------- 
  
+
 XBASE:
         CALL    GOODHIT             
 
-        LD      A,(HITCNTR)
+        LD      A,(HITCNTR)	;3-1-87
         CP      2
         RET     C               ;<3 CONSEQ HITS
  
+
+	;--- IF BASE ALREADY BEEN SCORED THEN NO ACTION   2-5-87
+
+	LD A,(HITOBJECT)
+	BIT 0,A
+	RET NZ
+
+
         LD      A,(THISHIT)     ;XMIT HIT
         LD      (TXBASE),A       
+
+	;wait for GOODHIT to complete
+
+	CALL WAIT_TG
+
         RET                      
+
+WAIT_TG:
+	CALL DEL1K
+	RET
+
 
 ;-------------------------------- 
 ;           HIT TOWER            
@@ -899,7 +988,10 @@ IRMISS:
 ;--------------------------------            
  
 TGWAIT:                                           
-        CALL    DEL1K           ;DELAY 1.1 SEC
+	;2-9-87
+
+	CALL WAIT_TG
+
 
         ;----- AWAIT TRIGGER RELEASE
 
@@ -908,6 +1000,7 @@ TGW1:
         BIT     1,A              
         JR      NZ,TGW1          
         RET                      
+
 
 ;********************************************
 ;***    RF INTERRUPT SERVICE              ***
@@ -997,8 +1090,9 @@ RF2:    LD A,(RFSTAT)
         RET     NZ              ;NOT HIT                       
          
         ;-------MAKE HIT ACTION
+	
+	;2-9-87
 
-        CALL    IMHIT
         CALL    STUN
         LD      HL,GOTHIT
         INC     (HL)
@@ -1013,11 +1107,21 @@ RF2:    LD A,(RFSTAT)
         LD HL,PODHIT
         INC (HL)
 
-	;10/1/86 variable disrupt
+	;SET POD HAS BEEN HIT FLAG see TRIGGER  2-9-87
 
-	CALL GET_DISRUPT
+	LD HL,IM_HIT
+	SET 0,(HL)
 
-        RET
+				;3-12-87
+	LD A,(LASTHIT)		;IF OBJECT LAST HIT, THEN CLR LASTHIT
+	AND 0C0H		;OBJECTS ARE 00XXXXXX
+	RET NZ
+
+	XOR A
+	LD (LASTHIT),A
+
+	RET
+
 
 
 ;-------------------------------- 
@@ -1457,6 +1561,7 @@ ESYNC1:
         LD (ESTATUS),A
 
         ;----- INC ECNTR
+
         LD      A,(ECNTR)        
         INC     A                
         LD      (ECNTR),A        
@@ -1549,9 +1654,11 @@ TXNOSYNC:
 ;--------------------------------
 ;        DO TABLE TASKS          
 ;--------------------------------
+;	2-5-87
 
 CLRALL:
         XOR     A                
+
         LD      (TXOPPONENT),A   
         LD      (TXFRIEND),A     
         LD      (TXBASE),A       
@@ -1559,7 +1666,9 @@ CLRALL:
         LD      (TXTARGET),A     
         LD      (HITOPPONENT),A  
         LD      (HITFRIEND),A    
-        LD      (HITOBJECT),A    
+	LD	(HITCNTR),A		;1-30-87
+	LD	(LASTHIT),A		;3-13-87
+
         RET                      
  
 
@@ -1588,6 +1697,9 @@ TH_PEG: LD A,(GCNTR)
         RET NZ
 
         CALL CLRALL
+	XOR A			;2-5-87
+        LD      (HITOBJECT),A    
+
         CALL TEAM
         LD A,GAME
         LD (SYSREQ),A
@@ -1645,7 +1757,7 @@ DF_GD:  XOR A
 
 DF_GE:  XOR A
         LD (ECNTR),A
-        CALL CLRALL
+;        CALL CLRALL	2-5-87
 
         LD A,GSYNC
         LD (TASK),A
@@ -1657,8 +1769,24 @@ DF_DD:  LD A,DSYNC
         LD (TASK),A
         RET
 
+;--------------------------------	2-9-87
+;I AM HIT  see DISRUPT & TRIGGER
 ;--------------------------------
-;        GAME SOUNDS             
+
+DO_IMHIT:
+	CALL IMHIT	;make hit sound
+
+	CALL GET_DISRUPT	;vary disrput time
+
+	LD HL,IM_HIT
+	RES 0,(HL)
+
+	RET
+
+
+;--------------------------------
+;        GAME SOUNDS
+;2-28-87 old sound bd routines             
 ;--------------------------------          
 
 BACKGND:
@@ -1861,12 +1989,21 @@ TEAM:
                                  
 IRRST:
         PUSH    AF               
+
         LD      A,(IO)            
         AND     0DFH             
+
         LD      (CONTROL),A      
+
+	NOP			;3-1-87
+	NOP
+	NOP
+
         LD      A,(IO)           
         LD      (CONTROL),A      
+
         POP     AF               
+
         RET                      
 
 ;--------------------------------         
@@ -2092,14 +2229,14 @@ GD2_TBL:
         ;RED GROUP OMEGA CONFIGURATION IS      01XXXXX1
         ;GREEN GROUP ALPHA CONFIGURATION IS    10XXXXX0
         ;GREEN GROUP OMEGA CONFIGURATION IS    10XXXXX1
-        ;OBJECTS GROUP ALL CONFIGURATION IS    00XXXXXX
+        ;OBJECTS GROUP ALL CONFIGURATION IS    00XXXXXX		3-1-87
         ;COMMAND GROUP ALL CONFIGURATION IS    11XXXXXX
 
 CODETBL:
         DB      47             ;NO. OF TABLE ENTRYS    
 	DB      RBASE,GBASE,RTOWER,GTOWER,TARGET,RBASE2,GBASE2
         DB      42H,44H,46H,48H,4AH,4CH,4EH,50H,52H,54H
-        DB      80H,82H,84H,86H,88H,8AH,8CH,8EH,90H,92H   
+        DB      94H,82H,84H,86H,88H,8AH,8CH,8EH,90H,92H   ;3-1-87
         DB      43H,45H,47H,49H,4BH,4DH,4FH,51H,53H,55H
         DB      81H,83H,85H,87H,89H,8BH,8DH,8FH,91H,93H
 
@@ -2117,4 +2254,4 @@ PODID:  DB 0FFH         ;POD 1
         END
 
 
-
+

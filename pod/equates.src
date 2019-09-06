@@ -1,8 +1,9 @@
 
 
-        ;SPOD14
-        ;DATE:  10-6-86 DSe
-	;ALPHA/OMEGA OR BETA POD
+        ;SPOD16		OLD SOUND BD
+        ;DATE: 2-28-87
+ 	;10-6-86 DSe ALPHA/OMEGA OR BETA POD
+	;2-28-87  IM_HIT EQU IO+41
 
 
 ;******************************************************************
@@ -84,6 +85,7 @@ SYSTYPE		EQU	IO+37	;E0h = alpha/omega	10/1/86
 HITS_IN		EQU	IO+38	;accumalative hits in 10/1/86
 HITS_OUT	EQU	IO+39	;accumalative hits out 10/1/86
 DSRPT_TIME	EQU	IO+40	;disrt time 10/1/86
+IM_HIT		EQU	IO+41	;see TRIG	2-28-87
 
 PTA             EQU     20H     ;IR RECVD DATA
 PTB             EQU     21H      
@@ -167,4 +169,4 @@ SERROR  EQU 0BFH        ;UNKN SYNC RECVD
 EALARM  EQU 0BBH        ;ECNTR WAS INCREMENTED
 
 
-
+
