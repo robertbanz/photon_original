@@ -1,0 +1,562 @@
+	NAME SLAVE4	DSe
+	LIST	E
+	NLIST	M,R,T,X
+
+;2-15-87	--- SLAVE3 16:00 DSe ---
+;	(1) TX OSC CONTROL, PSYNC GSYNC
+;	(2) GROUP: added RBASE2 GBASE2
+;2-19-87
+;	ESYNC1: TX OSC CONTROL
+;3-5-87		--- SLAVE4 ---
+;	SNDSCR: convert 94H to 80H when HITSIN & HITSOUT are sent to 
+;	systems computer
+;3-6-87
+;	stop SLAVE from echoing objects
+;	VALID: changed GROUP table search length
+;	GROUP: deleted objects
+
+
+;***********************************************************************
+
+;                       NSC-810 I/O PORT BIT DEFINITIONS                ;
+;                                                                       ;
+;         PORT A                    PORT B                 PORT C       ;
+;                                                                       ;
+;       BIT 0   RDA             BIT 0   N.C.            BIT 0   /INTR   ;
+;       BIT 1   COMM RDA        BIT 1   N.C.            BIT 1   BF      ;
+;       BIT 2   TEOC            BIT 2   N.C.            BIT 2   STB     ;
+;       BIT 3   ROR             BIT 3   N.C.            BIT 3   TG      ;
+;       BIT 4   RPE             BIT 4   N.C.            BIT 4   T1 IN   ;
+;       BIT 5   RFE             BIT 5   N.C.            BIT 5   T1 OUT  ;
+;       BIT 6   N.C.            BIT 6   N.C.            -----           ;
+;       BIT 7   COMM TEOC       BIT 7   N.C.            -----           ;
+
+;***********************************************************************
+
+;                    8255 BIDIRECTIONAL I/O BIT DEFINITIONS
+
+;                 PORT A              PORT B              PORT C
+
+;       BIT 0   IBM DATA BIT 0     BIT 0   N.C.        BIT 0   /XMITON
+;       BIT 1   IBM DATA BIT 1     BIT 1   N.C.        BIT 1   SPARE
+;       BIT 2   IBM DATA BIT 2     BIT 2   N.C.        BIT 2   SPARE
+;       BIT 3   IBM DATA BIT 3     BIT 3   N.C.        BIT 3   INTR
+;       BIT 4   IBM DATA BIT 4     BIT 4   N.C.        BIT 4   SPARE
+;       BIT 5   IBM DATA BIT 5     BIT 5   N.C.        BIT 5   IBF
+;       BIT 6   IBM DATA BIT 6     BIT 6   N.C.        BIT 6   /ACK
+;       BIT 7   IBM DATA BIT 7     BIT 7   N.C.        BIT 7   /OBF
+
+;***********************************************************************
+
+;                  8255 GENERAL PURPOSE I/O BIT DEFINITIONS             ;
+;                                                                       ;
+;            PORT A                PORT B                PORT  C        ;
+;                                                                       ;
+;       BIT 0   CD#1 A0         BIT 0   CD#2 A0        BIT 0  N.C.      ;    
+;       BIT 1   CD#1 A1         BIT 1   CD#2 A1        BIT 1  N.C.      ;    
+;       BIT 2   CD#1 A2         BIT 2   CD#2 A2        BIT 2  N.C.      ;    
+;       BIT 3   CD#1 A3         BIT 3   CD#2 A3        BIT 3  N.C.      ;    
+;       BIT 4   CD#1 STB        BIT 4   CD#2 STB       BIT 4  N.C.      ;    
+;       BIT 5   CD#1 INH        BIT 5   CD#2 INH       BIT 5  N.C.      ;    
+;       BIT 6   N.C.            BIT 6   N.C.           BIT 6  N.C.      ;    
+;       BIT 7   N.C.            BIT 7   N.C.           BIT 7  N.C.      ;    
+;                                                                       ;
+;***********************************************************************
+
+	FILE EQUATES.SRC
+
+	CSEG
+
+        ORG     0000
+CLDSTR: JP      0100H
+
+        ORG     0034H
+T1:     JP      TIMER1          ;RESTART B
+
+        ORG     003CH
+T0:     JP      TIMER0          ;RESTART A
+
+        ORG     0100H
+INITAL: DI
+        LD      SP,STACK
+        XOR     A
+        OUT     (MDR),A
+        OUT     (PTADDR),A
+        OUT     (PTBDDR),A
+        OUT     (T0MODE),A
+        OUT     (T1MODE),A
+        LD      A,6
+        OUT     (T0MODE),A
+        OUT     (T1MODE),A
+        LD      A,039H
+        OUT     (LSBT1),A       ;  TIMER 1 = 0.01630 SEC.   
+        LD      A,1
+        OUT     (MSBT1),A
+        LD      A,039H
+        OUT     (LSBT0),A       ;  TIMER 0 = 0.01630 SEC.
+        LD      A,1
+        OUT     (MSBT0),A
+        LD      A,021H
+        OUT     (PTCDDR),A
+        LD      A,0CH
+        OUT     (0BBH),A
+        LD      A,0C0H
+        LD      (COMAND),A
+
+	;clear STAT & CSTAT
+        XOR	A		;2-15-87
+        LD      (STAT),A
+        LD      (CSTAT),A
+
+	CALL XMITOF		;2-15-87
+
+	;clear ram
+        LD      HL,1000H
+        LD      BC,800H
+INIT:   LD      (HL),0
+        INC     HL
+        DEC     BC
+        LD      A,B
+        OR      C
+        JP      NZ,INIT
+
+        LD      B,RESET         ;SEND RESET STATUS
+        CALL    IBMWR
+
+REP1:   CALL    IBMRD           ;WAIT FOR PSYNC COMMAND
+        LD      A,B
+
+        CP      PSYNC
+        JP      Z,REP2
+
+	CP	GSYNC		;2-15-87
+	JP	Z,REP2
+
+        CP      RESET
+        JP      Z,INITAL
+
+        JP      REP1
+
+REP2:   LD      (GTASK),A
+        CALL    XMITON
+        XOR     A
+        LD      (SLOTCN),A
+        OUT     (START0),A
+        CALL    DEL12
+        OUT     (START1),A
+        EI
+
+MAIN:   LD      A,(FTASK)
+        CP      DTASK
+        CALL    Z,DISP
+        JR      MAIN
+
+TIMER0: EI
+        PUSH    AF
+        PUSH    BC
+        PUSH    DE
+        PUSH    HL
+        LD      HL,T0RET
+        PUSH    HL
+        XOR     A
+        LD      (RSTRF),A
+        LD      A,(SLOTCN)
+        INC     A
+        CP      67
+        JP      NZ,T01
+        XOR     A
+T01:    LD      (SLOTCN),A
+        LD      A,(GTASK)
+        CP      PSYNC
+        JP      Z,PSYNC0
+        CP      GSYNC
+        JP      Z,GSYNC0
+        CP      ESYNC
+        JP      Z,ESYNC0
+        POP     IX              ;CLEAR RET ADDR FROM STACK
+T0RET:  POP     HL
+        POP     DE
+        POP     BC
+        POP     AF
+        RET
+
+TIMER1: EI
+        PUSH    AF
+        PUSH    BC
+        PUSH    DE
+        PUSH    HL
+        LD      HL,T1RET
+        PUSH    HL
+        LD      A,(GTASK)
+        CP      PSYNC
+        JP      Z,PSYNC1
+        CP      GSYNC
+        JP      Z,GSYNC1
+        CP      ESYNC
+        JP      Z,ESYNC1
+        POP     IX              ;CLEAR RET ADDR FROM STACK
+T1RET:  POP     HL
+        POP     DE
+        POP     BC
+        POP     AF
+        RET
+
+PSYNC0: LD      A,(SLOTCN)
+        CP      0
+        JP      Z,G0T0
+        RET
+
+GSYNC0: LD      A,(SLOTCN)
+        LD      B,A
+        CP      0
+        JP      Z,G0T0
+        CP      2
+        JP      Z,G2T0
+        LD      A,29
+        CP      B
+        JR      C,NEXT1
+        LD      A,B
+        CP      24
+        JP      NC,G24T0
+NEXT1:  LD      A,(SLOTCN)
+        LD      B,A
+        LD      A,59
+        CP      B
+        JR      C,NEXT2         ;
+        LD      A,B
+        CP      54
+        JP      NC,G24T0
+NEXT2:  LD      A,(SLOTCN)
+        CP      60
+        JP      Z,G60T0
+        LD      A,(SLOTCN)
+        LD      B,A
+        LD      A,66
+        CP      B
+        JR      C,NEXT3
+        LD      A,B
+        CP      61
+        JP      NC,G61T0
+NEXT3:  RET
+
+ESYNC0: LD      A,(SLOTCN)
+        CP      0
+        JP      Z,G0T0
+        RET
+
+PSYNC1: LD      A,(SLOTCN)
+
+	;2-15-87
+        CP      59
+        JP      Z,G59T1
+        CP      66
+        JP      Z,G66T1
+        RET
+
+GSYNC1: LD      A,(SLOTCN)      ;
+        LD      B,A
+        CP      0
+        JP      Z,G1T1          ;
+        LD      A,22
+        CP      B
+        JP      C,NEXT
+        LD      A,B
+        CP      2
+        JP      NC,G2T1         ;    
+NEXT:   LD      A,(SLOTCN)      ;
+        CP      23
+        JP      Z,G23T1         ; 
+        CP      29
+        JP      Z,G1T1          ;
+        LD      A,(SLOTCN)      ;
+        LD      B,A
+        LD      A,52
+        CP      B
+        JR      C,NXT1          ;
+        LD      A,B
+        CP      30
+        JP      NC,G2T1
+NXT1:   LD      A,(SLOTCN)      ;
+        CP      53
+        JP      Z,G23T1         ;
+        CP      59
+        JP      Z,G59T1
+        CP      66
+        JP      Z,G66T1
+        RET
+
+ESYNC1: LD      A,(SLOTCN)      ;
+
+	;2-19-87
+        CP      59
+        JP      Z,G59T1         ;
+        CP      66
+        JP      Z,G66T1         ;
+        RET
+
+G0T0:   LD      A,(GTASK)
+        CALL    DELAY2
+        LD      (XMITRF),A
+        RET
+
+G2T0:   LD      HL,HITSIN
+        LD      B,92     
+NEX:    LD      (HL),0FFH
+        INC     HL
+        DJNZ    NEX
+        LD      HL,HITSIN-1
+        LD      (INPNTR),HL
+        LD      HL,HITOUT-1
+        LD      (OUTPTR),HL
+        INC     HL
+        LD      (HITPTR),HL
+        RET
+
+G24T0:  CALL    DELAY2
+        LD      HL,(HITPTR)
+        LD      A,(HL)
+        CP      0FFH
+        RET     Z
+        LD      (XMITRF),A
+        INC     HL
+        LD      (HITPTR),HL
+        RET
+
+G60T0:  LD      A,DTASK
+        LD      (FTASK),A
+        CALL    G61T0
+        RET
+
+G61T0:  LD      A,(STAT)	;check PORT C OBF
+        AND     080H
+        RET     Z
+        LD      A,(XFLAG)
+        CP      0
+        RET     Z
+        CALL    SNDSCR
+        XOR     A
+        LD      (XFLAG),A
+        RET
+
+G1T1:   CALL    XMITOF
+        RET
+
+G2T1:   LD      HL,(INPNTR)
+        INC     HL
+        LD      (INPNTR),HL
+        IN      A,(PTA)
+        AND     1
+        RET     Z
+        LD      A,(RECRF)
+        LD      HL,(INPNTR)
+        LD      (HL),A
+        CALL    VALID
+        CP      0
+        RET     Z
+        LD      HL,(OUTPTR)
+        INC     HL
+        LD      (OUTPTR),HL
+        LD      (HL),A
+        RET
+
+G23T1:  CALL    XMITON
+        CALL    G2T1
+        RET
+
+G59T1:  LD      A,(GTASK)
+        LD      B,A
+        CALL    IBMWR
+        LD      A,0FFH
+        LD      (XFLAG),A
+        RET
+
+G66T1:  LD      A,(STAT)	;check PORT C  IBF
+        AND     020H
+        RET     Z
+
+        LD      A,(DATA)
+        CP      PSYNC
+        JP      Z,STORIT
+        CP      GSYNC
+        JP      Z,STORIT
+        CP      ESYNC
+        JP      Z,STORIT
+        CP      RESET
+        JP      Z,INITAL
+        RET
+
+STORIT: LD      (GTASK),A       ;NEW TASK
+        RET
+
+IBMWR:  LD      A,(STAT)	;ck PORT C OBF
+        AND     80H
+        JP      Z,IBMWR
+        LD      A,B
+        LD      (DATA),A
+        RET
+
+IBMRD:  LD      A,(STAT)
+        AND     20H
+        JP      Z,IBMRD
+        LD      A,(DATA)
+        LD      B,A
+        RET
+
+DISP:   LD      C,58            ;OUTPUT TO CRT ALL HITS RECEIVED
+        LD      HL,HITSIN
+CRAP:   LD      A,(HL)
+        CALL    HEXASC
+        INC     HL
+        DEC     C
+        JP      Z,LFCR
+        LD      B,02DH
+        CALL    COMOUT
+        JP      CRAP
+LFCR:   LD      B,0DH
+        CALL    COMOUT
+        LD      B,0AH
+        CALL    COMOUT
+        XOR     A
+        LD      (FTASK),A
+        RET
+
+SNDSCR: LD      C,56            ;SEND HITSIN & HITSOUT TO IBM
+        LD      HL,HITSIN
+
+SS1:	LD      A,(HL)		;3-5-87
+	CP	94H		;watch for 94H
+	JR	NZ,SS2		;not 94H
+	LD	A,80H		;replace 94H with 80H
+
+SS2:	LD	B,A
+	CALL    IBMWR
+        INC     HL
+        DEC     C
+        JP      NZ,SS1
+        RET
+
+XMITOF:				;2-15-87
+	PUSH    AF
+        LD      A,(CSTAT)
+        SET	0,A		;2-15-87
+        LD      (STAT),A
+        LD      (CSTAT),A
+        POP     AF
+        RET
+
+XMITON:				;2-15-87
+	PUSH    AF
+        LD      A,(CSTAT)
+        RES	0,A		;2-15-87
+        LD      (STAT),A
+        LD      (CSTAT),A
+        POP     AF
+        RET
+
+DEL12:  PUSH    BC
+        PUSH    AF
+        XOR     A
+        LD      BC,01F0H
+        JP      DECLO
+
+DELAY2: PUSH    BC
+        PUSH    AF
+        XOR     A
+        LD      BC,004FH
+DECLO:  CP      C
+        JP      Z,DECHI
+        DEC     BC
+        JP      DECLO
+DECHI:  CP      B
+        JP      Z,POPOP
+        DEC     BC
+        JP      DECLO
+POPOP:  POP     AF
+        POP     BC
+        RET
+
+COMOUT: IN      A,(PTA)
+        AND     080H
+        JP      Z,COMOUT
+        LD      A,B
+        LD      (COM1TX),A
+        RET
+
+COMINP: IN      A,(PTA)
+        AND     02H
+        JP      Z,COMINP
+        LD      A,(COM1RX)
+        LD      B,A
+        RET
+
+HEXASC: PUSH    AF
+        PUSH    BC
+        PUSH    DE
+        PUSH    HL
+        LD      HL,ASCTBL
+        LD      D,0
+        LD      E,A
+        SRL     E
+        SRL     E
+        SRL     E
+        SRL     E
+        ADD     HL,DE
+        LD      B,(HL)
+        AND     0FH
+        LD      E,A
+        LD      HL,ASCTBL
+        ADD     HL,DE
+        LD      C,(HL)
+        PUSH    BC
+        CALL    COMOUT
+        POP     BC
+        LD      B,C
+        CALL    COMOUT
+        POP     HL
+        POP     DE
+        POP     BC
+        POP     AF
+        RET
+
+VALID:	PUSH	BC
+        PUSH    DE
+        PUSH    HL
+        LD      HL,GROUP
+        LD      C,42		;3-6-87
+        LD      B,A
+VNEX:   LD      A,(HL)
+        CP      B
+        JP      Z,CODEOK
+        INC     HL
+        DEC     C
+        JP      Z,NOTOK
+        JP      VNEX
+
+NOTOK:  XOR     A
+CODEOK: POP     HL
+        POP     DE
+        POP     BC
+        RET
+
+        ORG     0FA0H
+ASCTBL: DB      '0','1','2','3','4','5','6','7','8','9'
+        DB      'A','B','C','D','E','F'
+GROUP:  DB      40H,41H         ;TEST SLOTS 1 & 2
+        DB      42H,43H,44H,45H,46H,47H,48H,49H,4AH,4BH
+        DB      4CH,4DH,4EH,4FH,50H,51H,52H,53H,54H,55H
+        DB      94H,81H,82H,83H,84H,85H,86H,87H,88H,89H		;3-5-87
+        DB      8AH,8BH,8CH,8DH,8EH,8FH,90H,91H,92H,93H
+
+	;3-6-87
+
+
+        END
+
+
+
+
+
+
+
+
+

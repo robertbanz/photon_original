@@ -1,0 +1,61 @@
+
+;MEMORY EQUATES
+
+SLOTCN  EQU     1001H
+CSTAT   EQU     1002H
+FTASK   EQU     1003H
+GTASK   EQU     1004H
+INPNTR  EQU     1005H
+OUTPTR  EQU     1007H
+HITPTR  EQU     1009H
+XFLAG   EQU     100BH
+HITSIN  EQU     1010H
+HITOUT  EQU     103EH
+DATA    EQU     4000H
+DATA1   EQU     4001H
+STAT    EQU     4002H
+COMAND  EQU     4003H
+RSTRF   EQU     5000H
+COM1RX  EQU     08000H
+COM1TX  EQU     09000H
+RECRF   EQU     0C000H
+XMITRF  EQU     0D000H
+
+;CMD EQUATES
+
+RESET   EQU     0F0H
+ESYNC   EQU     0DDH
+GSYNC   EQU     0CAH
+PSYNC   EQU     0C5H
+DTASK   EQU     0F5H
+
+;IR/RF CODE EQUATES
+
+RBASE   EQU     035H
+RBASE2	EQU	036H	;2-15-87
+GBASE   EQU     02BH
+GBASE2	EQU	02DH	;2-15-87
+RTOWER  EQU     032H
+GTOWER  EQU     024H
+TARGET  EQU     038H
+
+;I/O EQUATES
+
+PTA     EQU     20H             ;NSC-810 PORT A                  
+PTB     EQU     21H             ;NSC-810 PORT B                  
+PTC     EQU     22H             ;NSC-810 PORT C                  
+PTADDR  EQU     24H             ;PORT A DATA DIR      
+PTBDDR  EQU     25H             ;PORT B DATA DIR      
+PTCDDR  EQU     26H             ;PORT C DATA DIR      
+MDR     EQU     27H             ;MODE REGISTER                   
+LSBT0   EQU     30H             ;TIMER 0 LSB                     
+MSBT0   EQU     31H             ;TIMER 0 MSB                     
+LSBT1   EQU     32H             ;TIMER 1 LSB                     
+MSBT1   EQU     33H             ;TIMER 1 MSB                     
+STOPT0  EQU     34H             ;STOP TIMER 0                    
+START0  EQU     35H             ;START TIMER 0                   
+STOPT1  EQU     36H             ;STOP TIMER 1                    
+START1  EQU     37H             ;START TIMER 1                   
+T0MODE  EQU     38H             ;TIMER 0 MODE                    
+T1MODE  EQU     39H             ;TIMER 1 MODE                    
+
