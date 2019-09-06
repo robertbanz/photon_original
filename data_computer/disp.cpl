@@ -1,0 +1,896 @@
+
+
+
+
+
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'XXXXXX						XXXXX
+	'XXXXXX		DATA COMPUTER			XXXXX
+	'XXXXXX						XXXXX
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'4/6/86 DSe
+	'REV:
+	'4/15/86 DSe	used game computer time and game number
+	'for display & printout	
+
+
+10
+     RECORDS.PROCESSED = 2
+     BYTES.PER.RECORD = 56
+     RECORDS.WRITTEN = 0
+     PLAYERS = 46
+     STATUS = 4
+     TASK = 5
+     ALPHA = 1
+     OMEGA = 2
+       ' SLAVE EQUATES
+
+     WRITE.SLAVE = &H204
+     READ.SLAVE = &H208
+     SLAVE.STATUS = &H20C
+
+           ' COMMAND AND STATUS CODES
+
+     RECET = &HF0                   ' SLAVE RESET
+     START = &HF1                   ' SLAVE START
+     PSYNC = &HC5                   ' SEND PRE-GAME SYNC
+     GSYNC = &HCA                   ' GAME SYNC, ONE PER CYCLE
+     ESYNC = &HDD                   ' END OF GAME SYNC (SLAVE STOP)
+
+' E T COMMAND AND STATUS CODES
+     READY.TO.START = &HF2          ' SEND START COMMAND ANY TIME
+     PROCESSING = &HF3              ' EDITING	
+     TRANSFER = &HF4                ' TRANSFER COMMAND
+     READY.TO.TRANSFER = &HF5       ' TRANSFER ANY TIME
+     STATUS.COMMAND = &HF6          ' E T WILL RESPOND WITH STATUS
+
+     ' TASK NUMBERS FOR E T COMMUNICATIONS
+
+     INPUT.BYTE     = 1             ' INPUT ONE BYTE OF DATA FROM 
+                                    ' SELECTED E T
+     OUTPUT.BYTE    = 2             ' OUTPUT ONE BYTE OF DATA TO
+                                    ' SELECTED E T
+     INPUT.STRING   = 3             ' INPUT STRING OF DATA FROM SELECTED E T
+     OUTPUT.STRING  = 4             ' OUTPUT STRING OF DATA TO SELECTED E T
+     INPUT.BLOCK    = 5             ' INPUT BLOCK OF DATA FROM SELECTED E T
+     OUTPUT.BLOCK   = 6             ' OUTPUT BLOCK OF DATA TO DATA COMPUTER
+
+
+           ' OPPONENT CODES
+
+     RED.BASE    = &H35
+     GREEN.BASE  = &H2B
+     TARGET      = &H38
+     RED.TOWER   = &H32
+     GREEN.TOWER = &H24
+
+                ' GAME TYPES
+     PUBLIC = &31
+     LEAGUE = &H32
+     FREE.FOR.ALL = &H33
+
+                ' CD COMMANDS
+     PAUSE = &HD
+     STOP.CD = &HC 
+
+
+	' SERIAL CHANNELS ON HOSTESS BOARD
+     ' CHANNEL ONE
+     H1DATA=&H2C0
+     H1INTE=&H2C1
+     H1LINE=&H2C3
+     H1MODE=&H2C4
+     H1STAT=&H2C5
+     H1MDST=&H2C6
+
+     ET.DATA = H1DATA
+     ET.INTE = H1INTE
+     ET.LINE = H1LINE
+     ET.MODE = H1MODE
+     ET.STAT = H1STAT
+     ET.MDST = H1MDST
+
+     ' CHANNEL TWO
+     H2DATA=&H2C8
+     H2INTE=&H2C9
+     H2LINE=&H2CB
+     H2MODE=&H2CC
+     H2STAT=&H2CD
+     H2MDST=&H2CE 
+
+     ALPHA.MODEM.STATUS = H2MDST
+     ALPHA.PRESENT = &H20                     ' IF BIT 5 SET, PRESENT
+
+     ' CHANNEL THREE
+     H3DATA=&H2D0
+     H3INTE=&H2D1
+     H3LINE=&H2D3
+     H3MODE=&H2D4
+     H3STAT=&H2D5
+     H3MDST=&H2D6 
+
+     OMEGA.MODEM.STATUS = H3MDST
+     OMEGA.PRESENT = &H20                     ' IF BIT 5 SET, PRESENT
+
+     ' CHANNEL FOUR
+     H4DATA=&H2D8
+     H4INTE=&H2D9
+     H4LINE=&H2DB
+     H4MODE=&H2DC
+     H4STAT=&H2DD
+     H4MDST=&H2DE 
+
+     ' CHANNEL FIVE
+     H5DATA=&H2E0
+     H5INTE=&H2E1
+     H5LINE=&H2E3
+     H5MODE=&H2E4
+     H5STAT=&H2E5
+     H5MDST=&H2E6 
+
+     'CHANNEL SIX
+     H6DATA=&H2E8
+     H6INTE=&H2E9
+     H6LINE=&H2EB
+     H6MODE=&H2EC
+     H6STAT=&H2ED
+     H6MDST=&H2EE 
+
+     'CHANNEL SEVEN
+     H7DATA=&H2F0
+     H7INTE=&H2F1
+     H7LINE=&H2F3
+     H7MODE=&H2F4
+     H7STAT=&H2F5
+     H7MDST=&H2F6 
+
+     'CHANNEL EIGHT (SAME ADDRESS AS COM2)
+     C2DATA=&H2F8
+     C2INTE=&H2F9
+     C2LINE=&H2FB
+     C2MODE=&H2FC
+     C2STAT=&H2FD
+     C2MDST=&H2FE 
+
+     'BIT DEFINITIONS FOR COMMUNICATIONS WITH HOSTESS
+     DATA.AVAILABLE = &H1
+     TX.BUFFER.EMPTY = &H20
+  
+
+	' DIMENSION THE ARRAYS
+
+     DIM XFER.DATA(1100)
+     DIM ALPHA.RED.SCORE(20)
+     DIM ALPHA.RED.NAME$(20)
+     DIM ALPHA.RED.ID$(20)
+     DIM ALPHA.GREEN.SCORE(20)
+     DIM ALPHA.GREEN.NAME$(20)
+     DIM ALPHA.GREEN.ID$(20)
+     DIM OMEGA.RED.SCORE(20)
+     DIM OMEGA.RED.NAME$(20)
+     DIM OMEGA.RED.ID$(20)
+     DIM OMEGA.GREEN.SCORE(20)
+     DIM OMEGA.GREEN.NAME$(20)
+     DIM OMEGA.GREEN.ID$(20)
+
+
+        ' COLOR EQUATES
+
+     BLACK   = 0
+     BLUE    = 1
+     GREEN   = 2
+     CYAN    = 3
+     RED     = 4
+     MAGENTA = 5
+     BROWN   = 6
+     WHITE   = 7
+     
+       ' ATTRIBUTE EQUATES
+       ' TO INVOKE JUST ADD ATTRIBUTE TO COLOR VALUE
+       ' EXAMPLE:  TO GET BLINKING BLUE FOREGROUND,
+       ' BLACK BACKGROUND,BLACK BORDER, THE COMMAND
+       ' WOULD BE COLOR BLUE+BLINKING,BLACK,BLACK
+
+
+     HIGH.INTENSITY = 8
+     BLINKING       = 16
+
+
+1000  '=================== SYSTEM INITIALIZATION ======================
+
+     DEF SEG=0
+
+     ' INITIALIZE SERIAL PORTS
+
+          ' CHANNEL ONE
+     OUT H1LINE,131
+     OUT H1DATA,12
+     OUT H1MODE,1	'RTS = 0   DTR =1
+     OUT H1INTE,0
+     OUT H1LINE,3
+
+     LOCATE 12,35
+     PRINT " DATA COMPUTER BUSY"
+     POKE &H410,(PEEK(&H410) AND &HCF) OR &H10
+     SCREEN 0,1
+     WIDTH 40
+     LOCATE 1,1,0
+     COLOR WHITE,BLACK,BLUE
+     CLS
+     KEY OFF
+     LOCATE 12,10
+     PRINT "GREETINGS, EARTHLINGS"
+     LOCATE 14,8
+     PRINT "WELCOME  TO PLANET PHOTON"  
+
+
+1500	'----------------------------------------------------------------
+	'		MAIN LOOP
+	'----------------------------------------------------------------
+
+	ENQ=&H05
+	STX=&H02
+	ACK=&H06
+	NAK=&H15
+
+	STATUS=ACK
+
+2000	'if status req, send status
+	GOSUB 14100
+	IF ERROR.FLAG=1 THEN 2000
+
+	IF DATA.IN <> ENQ THEN 2002
+	DATA.OUT = STATUS
+	GOSUB 14200
+	GOTO 2000
+
+2002	'if start of text, get text block
+	IF DATA.IN <> STX THEN 2000
+
+	'GET TEXT BLOCK TO XFER.DATA ARRAY
+	'----------------------------------
+
+	BYTE.CNTR = 0
+	STATUS=NAK
+	GOSUB 14500
+	IF ERROR.FLAG = 1 THEN 2000
+	IF DATA.IN <> CHECK.SUM THEN PRINT "NAK";:STATUS=NAK:GOTO 2000
+	PRINT " ACK";:STATUS=ACK
+
+	'DATA TO DISPLAY ARRAYS
+	'----------------------
+	GOSUB 14512
+
+	'DISPLAY SCORES
+	'---------------
+	GOSUB 2010
+
+	'PRINT RESULTS
+	'-------------
+	GOSUB 8840
+
+	GOTO 2000
+
+
+
+'------------------------------------------------------------------------
+'		DATA TO DISPLAY ARRAYS
+'------------------------------------------------------------------------
+14512
+	U=1
+
+	'date
+	STRING.LENGTH = 6
+	GOSUB 14800
+	GAME.DATE$ = A$
+
+	'time
+	STRING.LENGTH = 4
+	GOSUB 14800
+	GAME.TIME$ = A$
+
+	'game #
+	STRING.LENGTH = 2
+	GOSUB 14800
+	GAME.NUMBER$ = A$
+
+	'game mode
+	STRING.LENGTH = 1
+	GOSUB 14800
+	GAME.MODE = VAL(A$)
+
+	'ALPHA TERMINAL STATUS
+	STRING.LENGTH = 1
+	GOSUB 14800
+	ALPHA.TERMINAL = VAL(A$)
+
+	'ALPHA GAME TYPE
+	STRING.LENGTH = 1
+	GOSUB 14800
+
+
+	'OMEGA TERMINAL STATUS
+	STRING.LENGTH = 1
+	GOSUB 14800
+	OMEGA.TERMINAL = VAL(A$)
+
+	'OMEGA GAME TYPE
+	STRING.LENGTH = 1
+	GOSUB 14800
+
+
+     ' GET  ALPHA RED TEAM NAME
+     STRING.LENGTH = 10
+     GOSUB 14800
+     ALPHA.RED.TEAM.NAME$ = A$
+
+     ' GET ALPHA GREEN TEAM NAME
+     STRING.LENGTH = 10
+     GOSUB 14800
+     ALPHA.GREEN.TEAM.NAME$ = A$
+
+     ' GET  OMEGA RED TEAM NAME
+     STRING.LENGTH = 10
+     GOSUB 14800
+     OMEGA.RED.TEAM.NAME$ = A$
+
+     ' GET OMEGA GREEN TEAM NAME
+     STRING.LENGTH = 10
+     GOSUB 14800
+     OMEGA.GREEN.TEAM.NAME$ = A$
+
+
+	'TOTALS
+	STRING.LENGTH=24
+	GOSUB 14800
+
+
+     ALPHA.RED.TOTAL = 0
+     ALPHA.GREEN.TOTAL = 0
+     OMEGA.RED.TOTAL = 0
+     OMEGA.GREEN.TOTAL = 0
+
+     IF GAME.MODE = 2 THEN 14530
+     IF ALPHA.TERMINAL = 0 THEN 14520
+
+
+     ' GET RED PLAYERS AND THEIR ID`S
+          FOR X=1 TO 20
+               STRING.LENGTH = 10
+               GOSUB 14800
+               ALPHA.RED.ID$(X) = A$
+               GOSUB 14800
+               ALPHA.RED.NAME$(X) = A$
+               STRING.LENGTH = 5
+               GOSUB 14800
+               ALPHA.RED.SCORE(X) = VAL(A$)
+               IF ALPHA.RED.ID$(X) = "          " THEN 14515
+               ALPHA.RED.TOTAL = ALPHA.RED.TOTAL + ALPHA.RED.SCORE(X)
+14515          NEXT X
+          FOR X=1 TO 20
+               STRING.LENGTH = 10
+               GOSUB 14800
+               ALPHA.GREEN.ID$(X) = A$
+               GOSUB 14800
+               ALPHA.GREEN.NAME$(X) = A$
+               STRING.LENGTH = 5
+               GOSUB 14800
+               ALPHA.GREEN.SCORE(X) = VAL(A$)
+               IF ALPHA.GREEN.ID$(X) = "          " THEN 14518
+               ALPHA.GREEN.TOTAL = ALPHA.GREEN.TOTAL + ALPHA.GREEN.SCORE(X)
+14518     NEXT X
+     RETURN    
+
+14520     ' GET RED PLAYERS AND THEIR ID`S
+     OMEGA.RED.TOTAL = 0
+          FOR X=1 TO 20
+               STRING.LENGTH = 10
+               GOSUB 14800
+               OMEGA.RED.ID$(X) = A$
+               GOSUB 14800
+               OMEGA.RED.NAME$(X) = A$
+               STRING.LENGTH = 5
+               GOSUB 14800
+               OMEGA.RED.SCORE(X) = VAL(A$)
+               IF OMEGA.RED.ID$(X) = "          " THEN 14523
+               OMEGA.RED.TOTAL = OMEGA.RED.TOTAL + OMEGA.RED.SCORE(X)
+14523          NEXT X
+          FOR X=1 TO 20
+               STRING.LENGTH = 10
+               GOSUB 14800
+               OMEGA.GREEN.ID$(X) = A$
+               GOSUB 14800
+               OMEGA.GREEN.NAME$(X) = A$
+               STRING.LENGTH = 5
+               GOSUB 14800
+               OMEGA.GREEN.SCORE(X) = VAL(A$)
+               IF OMEGA.GREEN.ID$(X) = "          " THEN 14525
+               OMEGA.GREEN.TOTAL = OMEGA.GREEN.TOTAL + OMEGA.GREEN.SCORE(X)
+14525     NEXT X
+     RETURN
+
+
+
+ '		MODE 2
+14530
+          FOR X=1 TO 10
+               STRING.LENGTH = 10
+               GOSUB 14800
+               ALPHA.RED.ID$(X) = A$
+               GOSUB 14800
+               ALPHA.RED.NAME$(X) = A$
+               STRING.LENGTH = 5
+               GOSUB 14800
+               ALPHA.RED.SCORE(X) = VAL(A$)
+               IF ALPHA.RED.ID$(X) = "          " THEN 14540
+               ALPHA.RED.TOTAL = ALPHA.RED.TOTAL + ALPHA.RED.SCORE(X)
+14540
+          NEXT X
+          FOR X=1 TO 10     
+               STRING.LENGTH = 10
+               GOSUB 14800
+               ALPHA.GREEN.ID$(X) = A$
+               GOSUB 14800
+               ALPHA.GREEN.NAME$(X) = A$
+               STRING.LENGTH = 5
+               GOSUB 14800
+               ALPHA.GREEN.SCORE(X) = VAL(A$)
+               IF ALPHA.GREEN.ID$(X) = "          " THEN 14550
+               ALPHA.GREEN.TOTAL = ALPHA.GREEN.TOTAL + ALPHA.GREEN.SCORE(X)
+14550
+          NEXT X
+
+          FOR X=1 TO 10
+               STRING.LENGTH = 10
+               GOSUB 14800
+               OMEGA.RED.ID$(X) = A$
+               GOSUB 14800
+               OMEGA.RED.NAME$(X) = A$
+               STRING.LENGTH = 5
+               GOSUB 14800
+               OMEGA.RED.SCORE(X) = VAL(A$)
+               IF OMEGA.RED.ID$(X) = "          " THEN 14560
+               OMEGA.RED.TOTAL = OMEGA.RED.TOTAL + OMEGA.RED.SCORE(X)
+14560
+          NEXT X
+          FOR X=1 TO 10     
+               STRING.LENGTH = 10
+               GOSUB 14800
+               OMEGA.GREEN.ID$(X) = A$
+               GOSUB 14800
+               OMEGA.GREEN.NAME$(X) = A$
+               STRING.LENGTH = 5
+               GOSUB 14800
+               OMEGA.GREEN.SCORE(X) = VAL(A$)
+               IF OMEGA.GREEN.ID$(X) = "          " THEN 14570
+               OMEGA.GREEN.TOTAL = OMEGA.GREEN.TOTAL + OMEGA.GREEN.SCORE(X)
+14570
+          NEXT X
+     RETURN
+     
+
+14800
+     A$ = " "
+          FOR Z=1 TO STRING.LENGTH
+               A$ = A$ + CHR$(XFER.DATA(U))
+               U = U+1
+          NEXT Z
+     A$ = RIGHT$(A$,STRING.LENGTH)
+
+     RETURN
+
+
+
+
+	'---------------------------------
+	'	DISPLAY SCORES
+	'---------------------------------
+
+2010
+     IF GAME.MODE = 1 THEN 2020
+     COLOR BLACK,BLACK,BLUE
+     CLS
+     LOCATE 25,1
+     COLOR WHITE,BLUE,BLUE
+          FOR X=1 TO 40
+               PRINT " ";
+          NEXT X
+     COLOR BLACK,WHITE,BLUE
+          FOR X=14 TO 24
+               LOCATE X,1
+                    FOR Y=1 TO 40
+                         PRINT " ";
+                    NEXT Y
+          NEXT X
+     COLOR WHITE,BLACK,BLUE
+     LOCATE 1,3
+     PRINT "  ";ALPHA.RED.TEAM.NAME$;
+     LOCATE 1,26
+     PRINT ALPHA.GREEN.TEAM.NAME$;
+     LOCATE 13,3
+     COLOR BLACK,WHITE,BLUE
+     PRINT "  ";OMEGA.RED.TEAM.NAME$;
+     LOCATE 13,26
+     PRINT OMEGA.GREEN.TEAM.NAME$;
+     GOTO 2090
+
+2020
+     LOCATE 25,1
+     COLOR BLACK,BLUE,BLUE
+          FOR X=1 TO 40
+               PRINT " ";
+          NEXT X
+     COLOR BLACK,BLACK,BLUE
+          FOR X=2 TO 24
+               LOCATE X,1
+                    FOR Y=1 TO 40
+                         PRINT " ";
+                    NEXT Y
+          NEXT X
+
+     LOCATE 1,3
+     COLOR WHITE,BLACK,BLUE
+     IF ALPHA.TERMINAL = 0 THEN 2070
+     PRINT "  ";ALPHA.RED.TEAM.NAME$;
+     LOCATE 1,26
+     PRINT "  ";ALPHA.GREEN.TEAM.NAME$;
+     GOTO 2090
+2070
+     PRINT "  ";OMEGA.RED.TEAM.NAME$;
+     LOCATE 1,26
+     PRINT "  ";OMEGA.GREEN.TEAM.NAME$;
+
+2090
+
+     GOSUB 8000   ' DISPLAY IT
+     LOCATE 25,1
+     COLOR WHITE,BLUE,BLUE
+     PRINT "EARTH TIME ";GAME.TIME$;"  MANEUVER ";GAME.NUMBER$;" RESULTS";
+
+	RETURN 
+
+
+	'----------------------------------------------------
+	'  ROUTINE TO DISPLAY THE SORTED PLAYERS AND SCORES
+	'----------------------------------------------------
+8000
+     IF GAME.MODE = 1 THEN 8100
+     IF GAME.MODE = 2 THEN 8500
+
+8100
+
+     IF ALPHA.TERMINAL = 0 THEN 8400
+
+'    -----------------------------------------------------
+'   |         MODE 1 - TWO TEAMS OF UP TO 20 PLAYERS      |
+'    -----------------------------------------------------
+                            'PRINT RED SCORES
+     COLOR RED,BLACK,BLUE
+     IF ALPHA.RED.SCORE(1)<=ALPHA.GREEN.SCORE(1) THEN 8110
+     COLOR RED+BLINKING,BLACK,BLUE
+8110
+     LOCATE 3,1
+     TEMP=3
+          FOR X=1 TO 20
+               IF ALPHA.RED.ID$(X)="          " THEN 8120
+               LOCATE TEMP,2 : PRINT ALPHA.RED.NAME$(X)
+               LOCATE TEMP,13: PRINT USING "#####"; ALPHA.RED.SCORE(X)
+               TEMP=TEMP+1
+8120
+               COLOR RED,BLACK,BLUE
+          NEXT X
+     COLOR WHITE,BLACK,BLUE
+     IF ALPHA.RED.TOTAL <= ALPHA.GREEN.TOTAL THEN 8130
+     COLOR WHITE+BLINKING,BLACK,BLUE
+8130
+     LOCATE 23,12
+     PRINT USING "######"; ALPHA.RED.TOTAL
+
+8200
+                            ' PRINT GREEN SCORES
+     COLOR GREEN,BLACK,BLUE
+     IF ALPHA.GREEN.SCORE(1)<=ALPHA.RED.SCORE(1) THEN 8210
+     COLOR GREEN+BLINKING,BLACK,BLUE
+8210
+     TEMP=3
+          FOR X=1 TO 20
+               IF ALPHA.GREEN.ID$(X)="          " THEN 8220
+               LOCATE TEMP,23:PRINT ALPHA.GREEN.NAME$(X)
+               LOCATE TEMP,35:PRINT USING "#####";ALPHA.GREEN.SCORE(X)
+               TEMP=TEMP+1
+8220
+     COLOR GREEN,BLACK,BLUE
+          NEXT X
+     COLOR WHITE,BLACK,BLUE
+     IF ALPHA.GREEN.TOTAL<=ALPHA.RED.TOTAL THEN 8330
+     COLOR WHITE+BLINKING,BLACK,BLUE
+8330
+     LOCATE 23,34
+     PRINT USING "######";ALPHA.GREEN.TOTAL
+
+	RETURN
+
+
+'    -----------------------------------------------------
+'   |         MODE 1 - TWO TEAMS OF UP TO 20 PLAYERS      |
+'    -----------------------------------------------------
+                            'PRINT RED SCORES
+8400
+     COLOR RED,BLACK,BLUE
+     IF OMEGA.RED.SCORE(1)<=OMEGA.GREEN.SCORE(1) THEN 8410
+     COLOR RED+BLINKING,BLACK,BLUE
+8410
+     LOCATE 3,1
+     TEMP=3
+          FOR X=1 TO 20
+               IF OMEGA.RED.ID$(X)="          " THEN 8420
+               LOCATE TEMP,2 : PRINT OMEGA.RED.NAME$(X)
+               LOCATE TEMP,13: PRINT USING "#####"; OMEGA.RED.SCORE(X)
+               TEMP=TEMP+1
+8420
+               COLOR RED,BLACK,BLUE
+          NEXT X
+     COLOR WHITE,BLACK,BLUE
+     IF OMEGA.RED.TOTAL <= OMEGA.GREEN.TOTAL THEN 8430
+     COLOR WHITE+BLINKING,BLACK,BLUE
+8430
+     LOCATE 23,12
+     PRINT USING "######"; OMEGA.RED.TOTAL
+
+8440
+                            ' PRINT GREEN SCORES
+     COLOR GREEN,BLACK,BLUE
+     IF OMEGA.GREEN.SCORE(1)<=OMEGA.RED.SCORE(1) THEN 8450
+     COLOR GREEN+BLINKING,BLACK,BLUE
+8450
+     TEMP=3
+          FOR X=1 TO 20
+               IF OMEGA.GREEN.ID$(X)="          " THEN 8460
+               LOCATE TEMP,23:PRINT OMEGA.GREEN.NAME$(X)
+               LOCATE TEMP,35:PRINT USING "#####";OMEGA.GREEN.SCORE(X)
+               TEMP=TEMP+1
+8460
+     COLOR GREEN,BLACK,BLUE
+          NEXT X
+     COLOR WHITE,BLACK,BLUE
+     IF OMEGA.GREEN.TOTAL<=OMEGA.RED.TOTAL THEN 8470
+     COLOR WHITE+BLINKING,BLACK,BLUE
+8470
+     LOCATE 23,34
+     PRINT USING "######";OMEGA.GREEN.TOTAL
+
+	RETURN
+
+8500
+
+'    -----------------------------------------------------
+'   |        MODE 2 - FOUR TEAMS OF UP TO 10 PLAYERS      |
+'    -----------------------------------------------------
+
+
+     COLOR RED,BLACK,BLUE
+     IF ALPHA.RED.SCORE(1)<=ALPHA.GREEN.SCORE(1) THEN 8510
+     COLOR RED+BLINKING,BLACK,BLUE
+8510 
+     TEMP=2
+          FOR X=1 TO 10
+               IF ALPHA.RED.ID$(X)="          " THEN 8520
+               LOCATE TEMP,2 : PRINT ALPHA.RED.NAME$(X)
+               LOCATE TEMP,13: PRINT USING "#####"; ALPHA.RED.SCORE(X)
+               TEMP=TEMP+1
+8520           COLOR RED,BLACK,BLUE
+          NEXT X
+     COLOR WHITE,BLACK,BLUE
+     IF ALPHA.RED.TOTAL <= ALPHA.GREEN.TOTAL THEN 8530
+     COLOR WHITE+BLINKING,BLACK,BLUE
+8530 LOCATE 12,12
+     PRINT USING "######"; ALPHA.RED.TOTAL;
+
+8600                        ' PRINT GREEN SCORES
+     COLOR GREEN,BLACK,BLUE
+     IF ALPHA.GREEN.SCORE(1)<=ALPHA.RED.SCORE(1) THEN 8610
+     COLOR GREEN+BLINKING,BLACK,BLUE
+8610 TEMP=2
+          FOR X=1 TO 10
+               IF ALPHA.GREEN.ID$(X)="          " THEN 8620
+               LOCATE TEMP,23:PRINT ALPHA.GREEN.NAME$(X)
+               LOCATE TEMP,35:PRINT USING "#####";ALPHA.GREEN.SCORE(X)
+               TEMP=TEMP+1
+8620 COLOR GREEN,BLACK,BLUE
+          NEXT X
+     COLOR WHITE,BLACK,BLUE
+     IF ALPHA.GREEN.TOTAL<=ALPHA.RED.TOTAL THEN 8630
+     COLOR WHITE+BLINKING,BLACK,BLUE
+8630 LOCATE 12,34
+     PRINT USING "######";ALPHA.GREEN.TOTAL;
+
+                ' OMEGA SECTOR
+
+     COLOR RED,WHITE,BLUE
+     IF OMEGA.RED.SCORE(1)<=OMEGA.GREEN.SCORE(1) THEN 8710
+     COLOR RED+BLINKING,WHITE,BLUE
+8710 
+     TEMP=14
+          FOR X=1 TO 10
+               IF OMEGA.RED.ID$(X)="          " THEN 8720
+               LOCATE TEMP,2 : PRINT OMEGA.RED.NAME$(X)
+               LOCATE TEMP,13: PRINT USING "#####"; OMEGA.RED.SCORE(X)
+               TEMP=TEMP+1
+8720           COLOR RED,WHITE,BLUE
+          NEXT X
+     COLOR BLACK,WHITE,BLUE
+     IF OMEGA.RED.TOTAL <= OMEGA.GREEN.TOTAL THEN 8730
+     COLOR BLACK+BLINKING,WHITE,BLUE
+8730 LOCATE 24,12
+     PRINT USING "######"; OMEGA.RED.TOTAL;
+
+8800                        ' PRINT GREEN SCORES
+     COLOR GREEN,WHITE,BLUE
+     IF OMEGA.GREEN.SCORE(1)<=OMEGA.RED.SCORE(1) THEN 8810
+     COLOR GREEN+BLINKING,WHITE,BLUE
+8810 TEMP=14
+          FOR X=1 TO 10
+               IF OMEGA.GREEN.ID$(X)="          " THEN 8820
+               LOCATE TEMP,23:PRINT OMEGA.GREEN.NAME$(X)
+               LOCATE TEMP,35:PRINT USING "#####";OMEGA.GREEN.SCORE(X)
+               TEMP=TEMP+1
+8820 COLOR GREEN,WHITE,BLUE
+          NEXT X
+     COLOR BLACK,WHITE,BLUE
+     IF OMEGA.GREEN.TOTAL<=OMEGA.RED.TOTAL THEN 8830
+     COLOR BLACK+BLINKING,WHITE,BLUE
+8830 LOCATE 24,34
+     PRINT USING "######";OMEGA.GREEN.TOTAL;
+
+	RETURN
+
+
+8840	'****** PRINT GAME RESULTS ********
+
+'	CLS
+'	PRINT "PRINTING GAME RESULTS....WAIT"
+	ON ERROR GOTO 8860
+	LPRINT
+	LPRINT "THIS IS SYSTEMS COMPUTER TRE.DSe003 _______________________"
+	LPRINT:LPRINT:LPRINT
+	LPRINT "              ";
+	LPRINT "PLANET PHOTON ENCOUNTER.... EARTH SUMMARY";
+	LPRINT ".... EARTH DATE ";GAME.DATE$ 
+	LPRINT
+	LPRINT
+	KEY OFF
+
+	FOR X=1 TO 25
+     		FOR Y=1 TO 40
+             		V=SCREEN(X,Y)
+             	LPRINT CHR$(V);
+     		NEXT Y
+	LPRINT
+	NEXT X
+
+	LPRINT CHR$(12)     'FORM FEED
+8850	RETURN
+
+8860	'error exit
+'	LOCATE 10,10:PRINT "****  PRINTER NOT ON LINE  ****"
+	RESUME 8850
+
+
+
+
+
+     '----------------------------------------------------------:
+     ' ROUTINE TO INPUT ONE BYTE OF DATA FROM GAME COMPUTER	:
+     ' DATA RETURNED AS VARIABLE    DATA.IN			:
+     ' IF CHECK = 1 THEN PERFORM XOR CHECKSUM, ELSE RETURN	:
+     '----------------------------------------------------------:
+
+14100
+	ERROR.FLAG = 0
+	DATA.IN = 0
+
+	'---- ck for DATA READY true
+
+	ST = INP(ET.STAT) AND DATA.AVAILABLE
+	IF ST <> 0 THEN 14110
+
+	'---- set RTS true(i.e. CLS to GAME COMPUTER)
+
+	OUT ET.MODE,2
+
+	'---- ck for DATA READY true
+
+	IX=0: ST=0
+	WHILE IX < 6000 AND ST=0
+		ST = INP(ET.STAT) AND DATA.AVAILABLE
+		IX=IX+1
+	WEND
+
+	'---- set RTS false
+
+	OUT ET.MODE,0
+
+	IF ST=0 THEN ERROR.FLAG = 1:RETURN	'data not ready timeout
+
+14110:	'---- read data
+
+     	DATA.IN = INP(ET.DATA)
+
+	IF CHECK=0 THEN RETURN
+
+	CHECK.SUM=CHECK.SUM XOR DATA.IN
+
+	BYTE.CNTR=BYTE.CNTR+1
+	LOCATE 24,1:PRINT BYTE.CNTR;
+
+	RETURN
+
+
+
+	'---------------------------------------------------------------
+     	' ROUTINE TO OUTPUT ONE BYTE OF DATA TO GAME COMPUTER
+     	' DATA TO BE OUTPUT SHOULD BE IN VARIABLE   DATA.OUT
+	'---------------------------------------------------------------
+
+14200	ERROR.FLAG = 0
+
+	'---- ck CLS for true
+
+	OX=0: ST=0
+	WHILE OX < 6000 AND ST=0
+		ST = INP(ET.MDST) AND &H10
+		OX = OX+1
+	WEND
+
+	IF ST=0 THEN ERROR.FLAG = 1: RETURN	'no CLS from data computer
+
+	'---- await TX SHIFT REG EMPTY
+	ST=0
+	WHILE ST = 0
+	     	ST = INP(ET.STAT) AND &H40
+	WEND
+
+	'---- txmt data byte
+
+     	OUT ET.DATA,DATA.OUT
+
+	'---- ck CLS return to false
+
+	OX=0: ST=1
+	WHILE OX < 6000 AND ST <> 0
+		ST = INP(ET.MDST) AND &H10
+		OX = OX+1
+	WEND
+
+	IF ST <> 0 THEN ERROR.FLAG=1
+	RETURN
+
+
+'-----------------------------------------------------------------
+'	INPUT TEXT BLOCK TO XFER.DAT ARRAY
+'-----------------------------------------------------------------
+
+14500	'---- text block to array
+	CHECK = 1
+	CHECK.SUM = 0
+	ERROR.FLAG=0
+	V=0
+	WHILE V < 1081 AND ERROR.FLAG=0
+		GOSUB 14100
+		V=V+1
+		XFER.DATA(V) = DATA.IN
+		'---- ck for ENQ
+		IF DATA.IN=ENQ THEN ERROR.FLAG=1
+	WEND
+
+	'---- checksum to array
+
+	CHECK = 0
+	GOSUB 14100
+PRINT " GC ";STR$(DATA.IN);	'??????
+PRINT " DC ";CHECK.SUM;	'????
+     	XFER.DATA(1082) = DATA.IN
+
+	RETURN
+
+
