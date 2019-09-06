@@ -1,0 +1,161 @@
+
+	name	serio
+	list	e
+	nlist 	m,r,x,t
+	public	serinit,inpc,interm,serin,inlaser,inspare
+	public	outpc,outterm,serout,outlaser,outspare
+	public	laserst,pcst,termst,sparest
+**************************************************************
+*			equates				     *
+**************************************************************
+ch0	equ	0A000h		; channel 0 port address
+ch1	equ	0A002h		;    "    "  "      "
+ch2	equ	0A004h		;    "    "  "      "
+ch3	equ	0A006h		;    "    "  "      "
+txrdy	equ	01h		; mask for ready for transmission
+rxrdy	equ	02h		; mask for data available
+;
+	ejec
+	cseg
+**************************************************************
+*			SERINIT				     *
+*	The initialization code sets up each 8251 USART.     *
+*	The first byte written to each channel is the mode   *
+*	word.  This byte is then followed by the command     *
+*	word.						     *
+**************************************************************
+serinit:
+	ld	de,inittbl		; point to constant table
+	ld	hl,ch0			; begin with channel 0
+	inc	hl			; point to control address
+	ld	b,tbllen		; length of table
+	srl	b			; cut in half
+init1:
+	xor	a
+	ld	(hl),a
+	ld	(hl),a			; insure correct mode
+	ld	a,40h
+	ld	(hl),a
+	ld	a,(de)			; get a byte (mode)
+	ld	(hl),a			; output to usart
+	inc	de			; next byte
+	ld	a,(de)			; get it
+	ld	(hl),a			; output it (command)
+	inc	de			; next byte
+	inc	hl
+	inc	hl			; next channel
+	djnz	init1			; do all 4 channels
+	ret
+
+inittbl:
+	db	4eh,37h,4eh,37h,4eh,37h,4eh,37h
+tbllen	equ	$-inittbl
+	ejec
+
+**************************************************************
+*			SERIN				     *
+*	This routine will input one character from the	     *
+*	channel selected by register c.			     *
+*							     *
+*	entry:	c - channel number (0,1,2,3)		     *
+*	exit:	a - character			 	     *
+**************************************************************
+serin:
+	push	hl			; save hl
+	call	getadr			; get port address
+	inc	hl			; point to status port
+serst:
+	ld	a,(hl)			; input status
+	and	rxrdy			; check for character
+	jr	z,serst			; if not, loop
+	dec	hl			; data port
+	ld	a,(hl)			; get character
+	pop	hl			; restore hl
+	ret
+;
+**************************************************************
+*			SEROUT				     *
+*	This routine will output the data contained in the   *
+*	a register to the channel selected by register c.    *
+*							     *
+*	entry:	a - character				     *
+*		c - channel number (0,2,4,6)		     *
+*	exit	c - destroyed				     *
+**************************************************************
+
+serout:
+	push	hl
+	call	getadr
+	inc	hl
+	ld	c,a
+serst1:
+	ld	a,(hl)
+	and	txrdy
+	jr	z,serst1
+	ld	a,c
+	dec	hl
+	ld	(hl),a
+	pop	hl
+	ret
+getadr:
+	ld	hl,ch0
+	push	bc
+	ld	b,0
+	add	hl,bc
+	pop	bc
+	ret
+	ejec
+**************************************************************
+*		status routines				     *
+*	these routines will return with the zero flag	     *
+*	set if there is no receive character available       *
+*	and reset if there is a character		     *
+**************************************************************
+serstat:
+	push	hl
+	call	getadr
+	inc	hl
+	ld	a,(hl)
+	and	rxrdy
+	pop	hl
+	ret
+
+inpc:
+	ld	c,4
+	jp	serin
+outpc:
+	ld	c,4
+	jp	serout
+inlaser:
+	ld	c,2
+	jp	serin
+outlaser:
+	ld	c,2
+	jp	serout
+interm:
+	ld	c,0
+	jp	serin
+outterm:
+	ld	c,0
+	jp	serout
+inspare:
+	ld	c,6
+	jp	serin
+outspare:
+	ld	c,6
+	jp	serout
+
+laserst:
+	ld	c,2
+	jp	serstat
+termst:
+	ld	c,0
+	jp	serstat
+pcst:
+	ld	c,4
+	jp	serstat
+sparest:
+	ld	c,6
+	jp	serstat
+
+		

@@ -1,0 +1,252 @@
+
+	NAME COLD
+	LIST	E
+	NLIST	M,R,T,X
+
+	;DSe 9-19-86
+	******************************************************
+	******						******
+	******			COLD			******
+	******						******
+	******************************************************
+
+
+	;see SERIO
+	EXTRN	SERINIT,INPC,OUTPC
+
+	;see MENUS
+	EXTRN	MAINMENU
+
+	;see SCN
+	EXTRN	SCNHND,EDIT
+
+	;see TASKHND
+	EXTRN	TASK_HNDLR
+
+	;see MENUS
+	EXTRN	TRNSFR_MENU,START_MENU,CLEAR_MENU
+
+	;see TRNSFR
+	EXTRN	TRNSFR
+
+	;see ANCSUBS
+	EXTRN	ADRPAR
+
+	;see KEY_START
+	EXTRN	KEY_START
+
+	PUBLIC	MAXPLYRS,CONFIG,GAME_DATA,STATUS,TASK
+
+	FILE	EQUATES.SRC
+
+
+	DSEG
+CONFIG:		DS	1
+MAXPLYRS:	DS	1
+STATUS:		DS	1
+TASK:		DS	1
+
+
+	CSEG
+
+
+	***** 	COLD START ********
+
+COLDSTART:
+	JP	INIT
+
+
+
+	;==========================================
+	;===   GAME COMPUTER DATA IN INTERRUPT  ===
+	;==========================================
+
+	ORG	3CH
+
+	;save environment
+
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	PUSH	IX
+	PUSH	IY
+
+	;get byte from game computer
+
+	CALL	INPC
+	LD	(TASK),A
+
+	;if reset cmd, then goto COLDSTART
+
+	CP	RESET
+	JP Z,COLDSTART
+
+	;if status request, then goto SEND_STATUS
+
+	CP	STATCMD
+	JP	Z,SEND_STATUS
+
+
+	;check for task command
+
+	LD HL,TASK_TABLE
+	CALL ADRPAR
+	JR C,RETINT
+
+	LD DE,TASK_HNDLR	;force intrp ret to task handler
+		PUSH DE		;HL contains task addr
+	EI
+	RETI
+
+
+	;interrupt return
+	;-----------------
+RETINT:
+	POP	IY
+	POP	IX
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	EI
+	RETI
+
+
+	;------- task table -----------
+
+TASK_TABLE:
+	DB	08
+
+	DB	0C2H		'MENUS
+	DW	MAINMENU
+
+	DB	0C3H		'SCN
+	DW	EDIT
+
+	DB	0C4H		'SCN
+	DW	SCNHND
+
+	DB	0C5H		'MENUS
+	DW	TRNSFR_MENU
+
+	DB	0C6H		'MENUS
+	DW	START_MENU
+
+	DB	0C7H		'MENUS
+	DW	CLEAR_MENU
+
+	DB	0C8H		'KEYSTART
+	DW	KEY_START
+
+	DB	0CAH		'TRNSFR
+	DW	TRNSFR
+
+
+	;==========================================
+	;===	SEND STATUS TO GAME COMPUTER	===
+	;==========================================
+
+SEND_STATUS:
+
+	LD	A,(STATUS)
+	CALL	OUTPC
+
+	XOR	A
+	LD	(TASK),A
+
+	JP	RETINT
+
+
+
+	;==========================================
+	;===		INITIALIZATION		===
+	;==========================================
+	
+INIT:
+	DI
+
+	LD	SP,STK
+
+	;init hostess
+
+	CALL	SERINIT
+
+	;disable laser
+
+	LD	(LATCH),A
+
+	LD	(CLEAR),A		; CLEAR KEY START BIT
+
+	;declare status
+
+	LD	A,RESET
+	LD	(STATUS),A
+
+	;enable RST & interrupt
+
+	LD	A,08H			; CONSTANT TO ENABLE RST A
+	OUT	(0BBH),A		; SET UP INTERRUPT ENABLE
+	EI
+
+
+	;get configuration data from game computer
+	;-----------------------------------------
+
+	;get maxplyrs from game computer & echo same
+
+	CALL	GAME_DATA
+
+	LD	(MAXPLYRS),A
+
+	CALL	OUTPC
+
+
+	;get configuration from game computer & echo same
+
+	CALL	GAME_DATA
+
+	LD	(CONFIG),A
+
+	CALL	OUTPC
+
+	;await ACK or NAK
+
+AWAIT_ACK_NAK:
+
+	LD	A,AWAITING_ACK		;awaiting ACK or NAK
+	LD	(STATUS),A
+
+	CALL	GAME_DATA
+
+	CP	NAK
+	JP	Z,INIT
+
+	CP	ACK
+	JP	NZ,AWAIT_ACK_NAK
+
+	;assign first task
+	;-----------------
+
+	LD	HL,MAINMENU
+	JP	TASK_HNDLR
+
+
+	;===========================================
+	;====	AWAIT DATA FROM GAME COMPUTER	====
+	;===========================================
+
+GAME_DATA:
+
+	XOR	A
+	LD	(TASK),A
+
+GD_1:
+	LD	A,(TASK)
+	CP 0
+	JR	Z,GD_1
+
+	RET
+
+
+  

@@ -1,0 +1,300 @@
+	LIST	E
+	NLIST	M,R,T,X
+	NAME	TRNSFR
+
+	;9-19-86 DSe
+	******************************************************
+	******						******
+	******	   BETA TRANSFER TO GAME COMPUTER	******
+	******						******
+	******************************************************
+
+	;DESCRIPTION:
+
+	;	displays statuses to operator
+	;	READY:
+	;	sets status to rdy to transfer
+	;	awaits transfer red or transfer grn cmd from game computer
+	;		sets status to transferring
+	;		transfers datablock to game computer
+	;		sets status to awaiting ack or nak
+	;		if ack then done, rets to caller
+	;		if nak then goes back to READY
+
+
+	;RED or GRN TEAM DATA BLOCK:
+
+	;		data			bytes
+
+	;	game type			  1		binary
+	;	red team name			 10		asc
+	;	grn team name			 10		asc
+	;	20 players ID's & names		400		asc
+	;	xor checksum			  1		binary
+	;					----
+	;					422
+
+
+	;see COLD
+	EXTRN	TASK,STATUS,GAME_DATA
+
+	;see SERIO
+	EXTRN	OUTPC,INPC
+
+	;see SCN
+	EXTRN	SCNBUF,MSGOUT
+
+	;see MENUS
+	EXTRN	REDTEAM,GAMETYPE
+
+	;see USRMENUS
+	EXTRN	START_MENU
+
+	PUBLIC	TRNSFR,CKSUM,DOCS
+
+	FILE	EQUATES.SRC
+
+	DSEG
+
+CKSUM	DS	1			; BINARY CHECKSUM
+
+	ejec
+
+
+
+
+	CSEG
+	******************************************************
+	******						******
+	******	   BETA TRANSFER TO GAME COMPUTER	******
+	******						******
+	******************************************************
+
+TRNSFR:
+
+	;await transfer cmd from game computer
+	;-------------------------------------
+
+	;"awaiting transfer cmd"
+
+	LD HL,XWAIT_MSG
+	CALL MSGOUT
+
+	;status to rdy to transfer
+
+	LD	A,RDY_TO_XFER
+	LD	(STATUS),A	
+
+	;await game computer cmd
+
+	CALL	GAME_DATA
+
+	;transfer to game computer
+
+	LD	HL,TRNSFR_RET
+			PUSH HL
+	CP	SEND_RED
+	JP	Z,TRNSFR_RED
+
+	CP	SEND_GRN
+	JP	Z,TRNSFR_GRN
+
+			POP HL		'clear ret from stack
+	JR	TRNSFR
+
+TRNSFR_RET:
+
+	;await ACK or NAK
+
+	LD	A,AWAITING_ACK		;awaiting ACK or NAK
+	LD	(STATUS),A
+
+	CALL	GAME_DATA
+
+	CP	NAK
+	JP	Z,TRNSFR
+
+	CP	ACK
+	JP	NZ,TRNSFR_RET
+
+
+	LD	HL,START_MENU
+	RET
+
+
+	;===================================================
+	;====	     TRANSFER RED DATA BLOCK		====
+	;===================================================
+
+TRNSFR_RED:
+
+	;"transferring"
+
+	LD HL,XFER_MSG
+	CALL MSGOUT
+
+	;set status
+
+	LD	A,XFER
+	LD	(STATUS),A
+
+	;init (clear) ck sum
+
+	XOR	A
+	LD	(CKSUM),A
+
+	;send game type
+
+	LD	A,(GAMETYPE)		; PUBLIC,LEAGUE,OR FFA
+	CALL	DOCS			; PERFORM CHECKSUM
+	CALL	OUTPC			; OUTPUT TO GAME COMPUTER
+
+	;send red & green team names
+
+	LD	HL,REDTEAM
+	LD	B,1
+	CALL	TRNSFR_BLKS
+	
+	;send ID's and names
+
+	LD	HL,SCNBUF		; loc in of 1st red player
+	LD	DE,40			; offset to next red player ID
+	LD	B,20			; send 20 blocks, where each
+	CALL	TRNSFR_BLKS		;where each blk is ID# & name
+
+	;send check sum
+
+	LD	A,(CKSUM)
+	CALL	DLAY
+	CALL	OUTPC
+
+	RET
+
+
+
+	;===================================================
+	;====	     TRANSFER GRN DATA BLOCK		====
+	;===================================================
+
+TRNSFR_GRN:
+
+	;"transferring"
+
+	LD HL,XFER_MSG
+	CALL MSGOUT
+
+	;set status
+
+	LD	A,XFER
+	LD	(STATUS),A
+
+	;init (clear) ck sum
+
+	XOR	A
+	LD	(CKSUM),A
+
+	;send game type
+
+	LD	A,(GAMETYPE)		; PUBLIC,LEAGUE,OR FFA
+	CALL	DOCS			; PERFORM CHECKSUM
+	CALL	OUTPC			; OUTPUT TO GAME COMPUTER
+
+	;send red & green team names
+
+	LD	HL,REDTEAM
+	LD	B,1
+	CALL	TRNSFR_BLKS
+	
+	;send ID's and names
+
+	LD	HL,SCNBUF+20		; loc in of 1st grn player
+	LD	DE,40			; offset to next red player ID
+	LD	B,20			; send 20 blocks, where each
+	CALL	TRNSFR_BLKS		;where each blk is ID# & name
+
+	;send check sum
+
+	LD	A,(CKSUM)
+	CALL	DLAY
+	CALL	OUTPC
+
+	RET
+
+
+
+	;===================================================
+	;====	     	TRANSFER BLOCKS			====
+	;===================================================
+	;entry:
+	;	B = no. of seq 20 byte blocks to send
+	;	HL= starting address of 1st block
+	;	DE= offset to next block
+
+TRNSFR_BLKS:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	LD	B,20		;20 bytes in block
+GET_BYTE:
+	LD	A,(HL)
+	CALL	DOCS
+	CALL	DLAY
+	CALL	OUTPC
+	INC	HL
+	DJNZ	GET_BYTE
+
+	POP	HL
+	POP	DE
+	POP	BC
+
+	;addr of next block
+	ADD	HL,DE
+
+	;send next block
+	DJNZ	TRNSFR_BLKS
+
+	RET
+
+	
+
+	;===================================================
+	;====			DELAY			====
+	;===================================================
+
+DLAY:
+	PUSH	BC			; SAVE B
+	LD	C,02H			; DELAY FOR XMIT
+LBL1:	LD	B,0
+LBL2:	DJNZ	LBL2
+	DEC	C
+	JR	NZ,LBL1
+	POP	BC
+	RET
+
+
+
+	;===================================================
+	;====		   DO CHECKSUM			====
+	;===================================================
+
+DOCS:
+		PUSH	BC		; SAVE C
+	LD	C,A			; PUT CHAR IN C
+	LD	A,(CKSUM)		; GET CURRENT CHECKSUM
+	XOR	C			; XOR WITH CHAR IN C
+	LD	(CKSUM),A		; SAVE IN CHECKSUM
+	LD	A,C			; RESTORE CHAR TO A
+		POP	BC		; RESTORE C
+	RET
+
+
+
+XWAIT_MSG:
+	DB '  AWAITING GAME COMPUTER TRANSFER COMMAND  ',03
+
+XFER_MSG:
+	DB '  TRANSMITTING TO GAME COMPUTER  ',03
+
+
+

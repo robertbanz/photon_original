@@ -1,0 +1,148 @@
+	NAME EDITNM
+	LIST	E
+	NLIST	M,R,T,X
+
+	PUBLIC EDITNM
+
+	;see SCN
+	EXTRN CUR_NAME,CUR_NM_FLD,CHRADDR,ECHOCHR,CURFLD,CR2
+	EXTRN FIELDTAB,HOME2,ARRWRT,ARRWLF,ARROWUP,ARROWDN
+
+	;see SERIO
+	EXTRN INTERM,TERMST
+
+	;see ANCSUBS
+	EXTRN ADRPAR
+
+	FILE EQUATES.SRC
+
+
+	DSEG
+
+CHARBUF:	DS 1
+
+
+	CSEG
+******************************************
+**					**
+**  	     EDIT NAME FIELD		**
+**					**
+******************************************
+;exit: CF set if ctrl-Q entered
+
+;REVISION LOG:
+
+;	8-18-86 DSe	see SCN  CUR_NAME
+;	10-5-86 DSe	clear kybd uart on entry
+
+EDITNM:
+
+	CALL CUR_NAME
+	JP NZ,EXIT
+
+	;clear any char in uart buffer
+
+	CALL TERMST
+	JR Z,ED1_0	;no char in uart
+
+	CALL INTERM	;read uart to discard char
+
+ED1_0
+	;confirm cursor in name field
+
+	CALL CUR_NM_FLD
+	JP C,EXIT
+
+	;---- get terminal char
+
+	CALL INTERM
+	LD (CHARBUF),A
+
+	;---- if ctrl-Q, then set CF, ret
+
+	CP CTRLQ
+	SCF
+	RET Z		;>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+
+	;---- ck for control char
+
+	LD HL,NAME_TBL
+	CALL ADRPAR
+	JR C,ED1_1
+
+	;ret addr to stack, call serv routine
+	LD DE,ED2_1
+		PUSH DE
+	JP (HL)
+
+	;---- ck char range
+	
+ED1_1:	CP SPACE
+	JR Z,ED2_0
+
+	;if char < 30H, no echo
+	CP 30H
+	JR C,ED3_0
+
+;	--------------------------
+;	CHAR TO SCNBUF & ECHO CHAR
+;	--------------------------
+
+ED2_0:	CALL CHRADDR
+	JR C,ED2_1	;not in a field
+
+	LD A,(CHARBUF)
+	LD (HL),A
+	CALL ECHOCHR
+
+ED2_1:	CALL CURFLD
+	JR NC,ED3_0	;cursor in field
+
+	CALL FIELDTAB
+
+	;--------------
+ED3_0:
+	JR ED1_0
+
+
+;------ exit
+
+EXIT:
+	XOR A		;clear CF
+	RET
+
+
+;------------  EDITNM PARSER TABLE  -------------
+
+NAME_TBL:
+	DB	7
+
+	DB	HOME
+	DW	HOME2
+
+	DB	RTARROW
+	DW	ARRWRT
+
+	DB	LFARROW
+	DW	ARRWLF
+
+	DB	UPARROW
+	DW	ARROWUP
+
+	DB	DNARROW
+	DW	ARROWDN
+
+	DB	TAB
+	DW	FIELDTAB
+
+	DB	CR
+	DW	CR2
+
+
+
+
+
+
+
+

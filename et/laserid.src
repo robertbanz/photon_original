@@ -1,0 +1,366 @@
+
+	NAME	LASERID
+	LIST	E
+	NLIST 	M,R,T,X
+
+	PUBLIC	LASERID
+
+	;see SCN
+	EXTRN	ECHOCHR,CURFLD,CURSOR,MSGOUT
+	EXTRN	CHRADDR,POSNCUR
+	EXTRN	ADRPAR,HOME2,ARROWUP,ARROWDN,FIELDTAB
+	EXTRN	LASTLN,FIRSTLN,CUR_ID
+
+	;see GUN
+	EXTRN	GUN
+
+	;see SERIO
+	EXTRN	INTERM,INLASER
+
+	FILE EQUATES.SRC
+ 
+	CSEG
+
+
+;DSe 8-18-86
+********************************************
+****					****
+****		LASER ID		****
+****					****
+********************************************
+;exit: CF set if cntrl-Q entered
+
+
+;	--------------
+;	INITIALIZATION
+;	--------------
+
+LASERID:
+
+	;disable laser
+	LD (LATCH),A
+
+	;if cursor not at start of ID field
+	;then return
+
+	CALL CUR_ID
+	JP NZ,EXIT
+
+	;position cursor to 1st empty ID field
+	;in current ID column
+
+	CALL	POSNEMPTY
+
+;	--------------
+;	MAIN PROCEDURE
+;	--------------
+
+ID0_0:
+	;if cursor not at start of ID field
+	;then return
+
+	CALL CUR_ID
+	JP NZ,EXIT
+
+	;if ID field empty call EMPTY
+	;else call NOT_EMPTY
+
+	CALL CHRADDR
+	LD A,(HL)
+	CP SPACE
+
+	LD HL,ID0_RET	;ret addr to stack
+	PUSH HL
+
+	JP Z,EMPTY
+	JP NZ,NOT_EMPTY
+
+ID0_RET:
+	RET C		;>>>>>  ctrl-Q entered  >>>>>>>>
+
+	JR ID0_0
+
+
+EXIT:	OR A		;clear CF
+	RET
+
+
+;===========================================
+;====	   ID FIELD NOT EMPTY		====
+;===========================================
+
+NOT_EMPTY:
+
+	;" use up/dn arrow or tab to exit player
+	;or del to delete player "
+
+	LD HL,OVERMSG
+	CALL MSGOUT
+
+	;get terminal KB entry
+
+	CALL INTERM
+
+	;if ctrl-Q, then set CF, ret
+
+	CP CTRLQ
+	SCF
+	RET Z
+
+	;parser KB entry
+
+	LD HL,NOT_TBL
+	CALL ADRPAR
+	JP C,NE_RET
+
+	LD	DE,NE_RET
+	PUSH	DE
+	JP	(HL)
+
+NE_RET:
+	OR A		;clear CF
+	RET
+
+
+;------------  NOT_EMPTY PARSER TABLE  -----------
+
+NOT_TBL:
+	DB 5
+
+	DB	UPARROW
+	DW	ARROWUP
+
+	DB	DNARROW
+	DW	ARROWDN
+
+	DB	HOME
+	DW	HOME2	
+
+	DB	TAB
+	DW	TAB_ONCE
+
+	DB	DEL
+	DW	DELPLYR
+
+
+
+
+;===========================================
+;====	      ID FIELD EMPTY		====
+;===========================================
+
+EMPTY:
+	;"press space bar"
+
+	LD HL,MSGLASER
+	CALL MSGOUT
+
+	;get terminal KB entry
+
+	CALL INTERM
+
+	;if ctrl-Q, then set CF, ret
+
+	CP CTRLQ
+	SCF
+	RET Z
+
+	;parser KB entry
+
+	LD HL,E_TBL
+	CALL ADRPAR
+	JP C,E_RET
+
+	LD	DE,E_RET
+	PUSH	DE
+	JP	(HL)
+
+E_RET:
+	OR A		;clear CF
+	RET
+
+
+MSGLASER:
+	DB ' Press SPACE BAR to enable reader  ',03
+
+
+;------------  EMPTY PARSER TABLE  -----------
+
+E_TBL:
+	DB 5
+
+	DB	UPARROW
+	DW	ARROWUP
+
+	DB	DNARROW
+	DW	ARROWDN
+
+	DB	HOME
+	DW	HOME2	
+
+	DB	TAB
+	DW	TAB_TWICE
+
+	DB	SPACE
+	DW	READ_ID
+
+
+
+
+
+;===========================================
+;====		READ ID CARD		====
+;===========================================
+
+READ_ID:
+
+	;"insert card"
+
+	LD HL,INSERT_MSG
+	CALL MSGOUT
+
+
+	;enable laser
+
+	LD A,(LATCH)
+
+	;read ID card
+
+	LD B,10
+R1_1:		PUSH BC
+	CALL INLASER
+		PUSH AF
+	CALL CHRADDR
+		POP AF
+	LD (HL),A
+	CALL ECHOCHR
+		POP BC
+	DJNZ R1_1
+
+	;move to name field
+
+	CALL FIELDTAB		;cursor to name field
+
+	;laser off
+
+	LD (LATCH),A
+
+	;load gun
+
+	CALL GUN
+
+	RET
+
+INSERT_MSG:
+	DB ' INSERT CARD INTO READER ',03
+
+;===========================================
+;====	POSN CUR AT EMPTY ID FIELD	====
+;===========================================
+
+POSNEMPTY:
+	LD DE,(CURSOR)
+	LD A,(FIRSTLN)
+	LD	D,A
+PE1:
+		PUSH DE
+	LD (CURSOR),DE
+
+	CALL CHRADDR
+	LD A,SPACE
+	CP (HL)
+		POP DE
+	RET Z		;at empty IDFIELD >>>>>
+
+	LD A,(LASTLN)
+	CP D
+	RET Z		;last IDFIELD >>>>>>
+
+	INC D
+	JR PE1
+
+
+OVERMSG:
+	DB ' use UP/DN ARROWS or tab to exit field -or-DEL delete player ',03 
+
+
+
+
+
+;===========================================
+;====		DELETE PLAYER		====
+;===========================================
+
+DELPLYR:
+	LD HL,DEL_YN_MSG
+	CALL MSGOUT
+
+	CALL INTERM
+	CP 'Y'
+	JR Z,DELPLYR_1
+	CP 'y'
+	RET NZ
+
+DELPLYR_1:
+	LD DE,(CURSOR)
+		PUSH DE
+
+	;del player ID
+
+	LD B,10
+DEL1:		PUSH BC
+	CALL CHRADDR
+
+	LD (HL),SPACE
+	LD A,SPACE
+	CALL ECHOCHR
+		POP BC
+	DJNZ DEL1
+
+	CALL FIELDTAB		;move to name field
+
+	;delete player name
+
+	LD B,10
+DEL2:		PUSH BC
+	CALL CHRADDR
+	LD (HL),SPACE
+	LD A,SPACE
+	CALL ECHOCHR
+		POP BC
+	DJNZ DEL2
+
+		POP DE
+	LD (CURSOR),DE
+	CALL POSNCUR
+
+	RET
+
+
+DEL_YN_MSG:
+	DB '  --- CONFIRM ---  delete player  Y/N  ',03 
+
+;===========================================
+;====	     FIELD TAB ONCE		====
+;===========================================
+
+TAB_ONCE:
+	CALL FIELDTAB
+	RET
+
+
+
+;===========================================
+;====	     FIELD TAB TWICE		====
+;===========================================
+
+TAB_TWICE:
+	CALL FIELDTAB
+	CALL FIELDTAB
+
+	CALL POSNEMPTY
+
+	RET
+
+
+

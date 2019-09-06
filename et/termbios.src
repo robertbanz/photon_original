@@ -1,0 +1,187 @@
+	NAME TERMBIOS
+	LIST E
+	NLIST M,R,T,X
+
+	;DSe 8-19-86
+	*****************************************************
+	*****						*****
+	*****		TERMINAL BIOS			*****
+	*****						*****
+	*****************************************************
+
+	PUBLIC POSNCUR,CURPOSN,CLEAR_SCN,CLR_FROM_CUR
+	PUBLIC CLR_LN,CHGATTR,LNATTR
+
+	;see SCN
+	EXTRN CURSOR
+
+	;see SERIO
+	EXTRN INTERM,OUTTERM
+
+	FILE EQUATES.SRC
+
+	ejec
+
+
+
+
+
+	CSEG
+
+	*****************************************************
+	*****						*****
+	*****		TERMINAL BIOS			*****
+	*****						*****
+	*****************************************************
+
+
+
+	;=========================================
+	;==	     POSITION CURSOR		==
+	;== entry:	D=LN#	E=COL#		==
+	;=========================================
+
+POSNCUR:
+	LD (CURSOR),DE
+
+	LD A,D		;LN#
+	DEC A
+	ADD A,20H
+	LD D,A
+
+	LD A,E		;COL#
+	DEC A
+	ADD A,20H
+	LD E,A
+
+	;ESC=LN#COL#
+	;-----------
+		PUSH DE
+	LD A,ESC
+	CALL CHAROUT
+	LD A,'='
+	CALL CHAROUT
+		POP DE
+		PUSH DE
+	LD A,D
+	CALL CHAROUT
+		POP DE
+	LD A,E
+	CALL CHAROUT
+
+		RET
+
+
+
+	;=========================================
+	;==	    GET CURSOR POSITION		==
+	;== exit:	D=LN#	E=COL#		==
+	;=========================================
+
+CURPOSN:
+	LD A,ESC
+	CALL CHAROUT
+	LD A,'?'
+	CALL CHAROUT
+
+	CALL CHARIN
+
+	INC A		;LN#
+	SUB 20H
+	LD D,A
+		PUSH DE ;save line#
+	CALL CHARIN
+		POP DE 
+	INC A		;col#
+	SUB 20H
+	LD E,A
+		PUSH DE
+	CALL CHARIN	;get CR
+		POP DE
+
+		RET
+
+
+
+	;==========================================
+	;==		CLEAR SCREEN
+	;==========================================
+
+CLEAR_SCN:
+	LD A,CLRSCN
+	CALL CHAROUT
+	RET
+
+
+
+	;==========================================
+	;==	CLEAR FROM CURSOR TO END OF SCREEN
+	;==	WITH SPACES
+	;==========================================
+
+CLR_FROM_CUR:
+	LD A,ESC
+	CALL CHAROUT
+	LD A,'Y'
+	CALL CHAROUT
+	RET
+
+
+	;==========================================
+	;==	CLEAR FROM CURSOR TO END OF LINE
+	;==	WITH SPACES
+	;==========================================
+
+CLR_LN:
+	LD A,ESC
+	CALL CHAROUT
+	LD A,'T'
+	CALL CHAROUT
+	RET
+
+
+	;=========================================
+	;==	SET LINE ATTRIBUTE FROM		==
+	;==	CURSOR TO END OF LINE		==
+	;==	entry:	A=attribute		==
+	;=========================================
+
+LNATTR:		PUSH AF
+	LD A,ESC
+	CALL CHAROUT
+	LD A,'G'
+	CALL CHAROUT
+		POP AF
+	CALL CHAROUT
+	RET
+
+
+
+	;=========================================
+	;==	     CHANGE ATTR		==
+	;== entry: C=attr			==
+	;=========================================
+
+CHGATTR:	PUSH BC
+	LD A,ESC
+	CALL CHAROUT
+		POP BC
+	LD A,C
+	CALL CHAROUT
+		RET
+
+
+	;=========================================
+	;==	       CHARACTER I/O		==
+	;=========================================
+
+CHARIN:
+	CALL INTERM
+	RET
+
+CHAROUT:
+	CALL OUTTERM
+	RET
+
+
+

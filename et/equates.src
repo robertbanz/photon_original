@@ -1,0 +1,106 @@
+
+
+
+
+
+;DSe	8-18-86
+********************************************
+****					****
+****	     ET SYSTEM EQUATES		****
+****					****
+********************************************
+;9-19-86 DSe
+
+STK	EQU	2800H
+IR	EQU	4000H		; GUN PORT
+SFAT	EQU	6000H	; GENERAL PURPOSE PARALLEL (STATUS)
+CLEAR	EQU	8000H	; USED TO INITIALIZE CERTAIN DEVICES
+LATCH	EQU	0E000H
+
+
+;---------  terminal  -----------
+
+;screen attributes
+
+HLFINT	EQU ')'
+FULINT	EQU '('
+
+;screen line attributes
+
+NORM		EQU '0'
+BLINK		EQU '0'		;changed to stop all blinking
+RVRS		EQU '4'
+RVRSBLNK	EQU '6'
+UNDERLINE	EQU '8'
+BLNKUNDR	EQU ':'
+
+CLRSCN	EQU	1AH	;ctrl-Z
+
+CTRLQ	EQU 11H	;ctrl-Q
+ESC	EQU 1BH
+TAB	EQU 09H		;cntl-I
+DNARROW	EQU 0AH		;ctrl-J
+UPARROW	EQU 0BH		;ctrl-K
+CR	EQU 0DH		;ctrl-M
+LF	EQU 1FH		;ctrl-_
+BELL	EQU 07H		;ctrl-G		not used
+ENTER	EQU 0DH
+
+HOME	EQU	01EH	;ctrl-^
+RTARROW	EQU	0CH
+LFARROW	EQU	08H
+SPACE	EQU	20H
+DEL	EQU	7FH
+
+
+MSGLN	EQU	24
+
+;format files. see MAIN
+
+IDFLD1	EQU	8
+IDFLD2	EQU	50
+
+NMFLD1	EQU	22
+NMFLD2	EQU	64
+
+;see SCN
+SCNLEN	EQU	1000	;SCNBUF length
+
+
+;note: GUN masks these with 2FH before
+;before outputting game type to pods
+
+PUBLIK		EQU	0E1H
+LEAGUE		EQU	0E2H
+FREFRALL	EQU	0E3H
+
+;commands from game computer
+
+RESET		EQU	0D0H
+
+STATCMD		EQU	0D2H
+
+SEND_RED	EQU	0DAH	'TRNSFR
+SEND_GRN	EQU	0DBH	'TRNSFR
+
+STRTCMD		EQU	0DDH
+
+;statuses to game computer
+
+AT_MAIN_MENU	EQU	0F2H
+EDITING		EQU	0F3H
+
+AT_TRNSFR_MENU	EQU	0F6H	'MENUS
+AT_START_MENU	EQU	0F7H	'MENUS
+AT_CLEAR_MENU	EQU	0F8H	'MENUS
+AT_KEY_START	EQU	0F9H	'KEYSTART
+RDY_TO_XFER	EQU	0FAH	'TRNSFR
+XFER		EQU	0FBH	'TRNSFR
+AWAITING_ACK	EQU	0FCH	'TRNSFR
+RDY_TO_START	EQU	0FDH
+
+;game/ET protocol ctrl chars
+
+ACK		EQU	06H	'TRNSFR
+NAK		EQU	15H	'TRNSFR
+

@@ -1,0 +1,770 @@
+	NAME	MENUS
+	LIST E
+	NLIST M,R,T,X
+
+	;DSe 8-18-86
+	******************************************************
+	******						******
+	******			MENUS			******
+	******						******
+	******************************************************
+
+	;REVISIONS LOG:
+
+	;10-8-86 DSe
+	;moved green only screen entry to screen right
+	;10-9-86 DSe
+	;LEAG: assigns league team name(s) format file for LNAMES
+	;added MENU selection to TRNFR_MENU
+
+;	-------------- notes ----------------
+
+;	(1) format files selection lines MUST
+; 	    be sequential
+;	(2) tasks in address tables must equal
+;	    select line numbers in format files
+
+
+;	configuration byte defined (see MAINMENU tasks)
+
+;      11 red & grn terminals on line --
+;      01 only red terminal on line   --|   ------ 00 BETA SYSTEM
+;      10 only grn terminal on line   --|  |
+; 					|  |	-- 10 handle red only
+;					|  |   |-- 10 handle grn only
+;			not used ---	|  |   |-- 11 handle red & grn
+;	  DTR			    |   |  |   |
+;	 R   G			    |   |  |   |
+;	 E   R			    |   |  |   |
+;	 D   N			    |	|  |   |
+
+;	 1   1	RED terminal confg  00 11  00 01	32H
+;		GRN terminal confg  00 11  00 10	31H
+
+;	 0   1	RED terminal confg  00 01  00 11	13H
+;		GRN terminal confg  00 00  00 00	00H
+
+;	 1   0	RED terminal confg  00 00  00 00	00h
+;		GRN terminal confg  00 10  00 11	23H
+
+
+	PUBLIC MAINMENU,FFUPROT,REDTEAM
+	PUBLIC TRNSFR_MENU,START_MENU,CLEAR_MENU,GAMETYPE
+	PUBLIC LNAMES
+
+	;see COLD
+	EXTRN	MAXPLYRS,CONFIG,STATUS
+
+	;see EDITNM
+	EXTRN	EDITNM
+
+	;see SERIO
+	EXTRN	INTERM,OUTTERM
+
+	;see SCN
+	EXTRN	LNCHARS,FIRSTLN,FFADR
+	EXTRN	LASTLN,SCNTYPE,CLRSBUF,SCNHND,POSNFST
+	EXTRN	POSNCUR,CURSOR,MSGOUT,SCNBUF,EDIT
+
+	;see TERMBIOS
+	EXTRN	CLEAR_SCN,CLEAR_MSG_AREA
+
+	;see MENUSUBS
+	EXTRN	DSPLYFF,GETSELECTION,SELECTTBL,FFGET
+
+	;see KEYSTART
+	EXTRN	KEY_START
+
+	;see TRNSFR
+	EXTRN	TRNSFR
+
+	;see MENUSUBS
+	EXTRN	CLR_MSG_AREA
+
+
+MFST	EQU 8
+SFST	EQU 21
+CHAFST	EQU 3
+TIM1FST EQU 2
+
+
+	DSEG
+
+GAMETYPE:	DS 1
+REDTEAM:	DS 20
+XFFADR:		DS 2
+XLNCHARS:	DS 1
+XFIRSTLN:	DS 1
+XLASTLN:	DS 1
+SCNBF2:		DS 100
+FFUPROT:	DS 2
+LEAG_NM_FF:	DS 2
+
+	FILE EQUATES.SRC
+
+	ejec
+
+
+
+
+	CSEG
+
+	******************************************************
+	******						******
+	******			MENUS			******
+	******						******
+	******************************************************
+
+
+	;TASK
+	*********************************************
+	****		MAIN MENU		*****
+	*********************************************
+	;called by :	TASKHND
+
+MAINMENU:
+	;set status
+
+	LD A,AT_MAIN_MENU
+	LD (STATUS),A
+
+	CALL CLEAR_SCN
+
+	;dsply menu
+
+	LD HL,MAINFF
+	LD (FFGET),HL
+	CALL DSPLYFF
+	LD	HL,MAINMSG
+	CALL	MSGOUT
+
+	;get selection, go task
+	;and return
+
+	LD HL,MAINTBL
+	LD (SELECTTBL),HL
+	CALL GETSELECTION
+
+	RET
+
+;------- MAIN MENU FORMAT FILE ------
+
+MAINFF:
+	DB 0FEH,HLFINT			; SET TO 1/2 INTENSITY
+	DB 0EEH,01,01,'MAIN menu'		; PRINT MSG AT LN 1,COL 1
+	DB 0EEH,01,60,'beta version 092086'	; DITTO AT LN 1, COL 30
+	;selections
+	DB 0FEH,FULINT			; BACK TO FULL INTENSITY
+	
+	DB 0FDH,MFST,16,'PUBLIC'
+	DB 0FDH,MFST+2,16,'LEAGUE'
+	DB 0FDH,MFST+4,16,'FREE FOR ALL'
+	DB	0FFH
+
+MAINMSG:
+	DB '    Make selection with up/down '
+	DB 'ARROWS, then press RETURN    '
+	DB	03
+
+MAINTBL:
+	DB 3	;no. of tbl entrys
+
+	DB MFST
+	DW PUB
+
+	DB MFST+2
+	DW LEAG
+
+	DB MFST+4
+	DW FFA
+
+
+
+	;TASK
+	*********************************************
+	****	       TRANSFER MENU		*****
+	*********************************************
+	;called by :	TASKHND
+
+TRNSFR_MENU:
+
+	LD DE,(CURSOR)
+		PUSH DE
+
+	;set status
+
+	LD A,AT_TRNSFR_MENU
+	LD (STATUS),A
+
+	;dsply menu
+
+	CALL CLR_MSG_AREA
+
+	LD HL,TRNSFFF
+	LD (FFGET),HL
+	CALL DSPLYFF
+	LD	HL,MAINMSG
+	CALL	MSGOUT
+
+	;get selection, return
+
+	LD HL,TRNSFTBL
+	LD (SELECTTBL),HL
+	CALL GETSELECTION
+		POP DE
+	LD (CURSOR),DE
+
+	RET
+
+;------- TRANSFER MENU FORMAT FILE ------
+TRNSFFF:
+	DB 0FEH,HLFINT			; SET TO 1/2 INTENSITY
+	;selections
+	DB 0FEH,FULINT			; BACK TO FULL INTENSITY
+	
+	DB 0FDH,SFST,40,'TRANSFER'
+	DB 0FDH,SFST+1,40,'EDIT  '
+	DB 0FDH,SFST+2,40,'MENU  '	;10/9/86
+	DB	0FFH
+
+TRNSFTBL:
+	DB 3	;no. of tbl entrys	;10/9/86
+
+	DB SFST
+	DW TRNSFR1
+
+	DB SFST+1
+	DW EDIT2
+
+	DB SFST+2			;10/9/86
+	DW MENU3
+
+TRNSFR1:
+	LD HL,TRNSFR
+	RET
+
+EDIT2:
+	LD HL,EDIT
+	RET
+
+
+	;TASK
+	*********************************************
+	****	       START MENU		*****
+	*********************************************
+	;called by :	TASKHND
+
+START_MENU:
+	LD	DE,(CURSOR)
+		PUSH	DE	
+
+	;set status
+
+	LD A,AT_START_MENU
+	LD (STATUS),A
+
+	;dsply menu
+
+	CALL CLR_MSG_AREA
+
+	LD HL,STARTFF
+	LD (FFGET),HL
+	CALL DSPLYFF
+	LD	HL,MAINMSG
+	CALL	MSGOUT
+
+	;get selection, return
+
+	LD HL,STARTTBL
+	LD (SELECTTBL),HL
+	CALL GETSELECTION
+		POP	DE
+	LD	(CURSOR),DE		
+	RET
+
+;------- START MENU FORMAT FILE ------
+STARTFF:
+	DB 0FEH,HLFINT			; SET TO 1/2 INTENSITY
+	;selections
+	DB 0FEH,FULINT			; BACK TO FULL INTENSITY
+	
+	DB 0FDH,SFST,40,'START   '
+	DB 0FDH,SFST+1,40,'EDIT    '
+	DB 0EEH,SFST+2,40,'        '
+	DB	0FFH
+
+STARTTBL:
+	DB 2	;no. of tbl entrys
+
+	DB SFST
+	DW START1
+
+	DB SFST+1
+	DW EDIT2
+
+START1:
+	LD HL,KEY_START
+	RET
+
+
+	;TASK
+	*********************************************
+	****	       CLEAR MENU		*****
+	*********************************************
+	;called by :	TASKHND
+
+CLEAR_MENU:
+	LD	DE,(CURSOR)
+		PUSH	DE
+
+	;set status
+
+	LD A,AT_CLEAR_MENU
+	LD (STATUS),A
+
+	;dsply menu
+
+	CALL CLR_MSG_AREA
+
+	LD HL,CLEARFF
+	LD (FFGET),HL
+	CALL DSPLYFF
+	LD	HL,MAINMSG
+	CALL	MSGOUT
+
+	;get selection, return
+
+	LD HL,CLEARTBL
+	LD (SELECTTBL),HL
+	CALL GETSELECTION
+		POP DE
+	LD	(CURSOR),DE
+	RET
+
+;------- CLEAR MENU FORMAT FILE ------
+
+CLEARFF:
+	DB 0FEH,HLFINT			; SET TO 1/2 INTENSITY
+	;selections
+	DB 0FEH,FULINT			; BACK TO FULL INTENSITY
+	
+	DB 0FDH,SFST,40,'CLEAR   '
+	DB 0FDH,SFST+1,40,'EDIT   '
+	DB 0FDH,SFST+2,40,'MENU   '
+	DB	0FFH
+
+CLEARTBL:
+	DB 3	;no. of tbl entrys
+
+	DB SFST
+	DW CLEAR1
+
+	DB SFST+1
+	DW EDIT2
+
+	DB SFST+2
+	DW MENU3
+
+CLEAR1:
+	LD HL,SCNHND
+	RET
+
+MENU3:
+	LD HL,MAINMENU
+	RET
+
+
+
+
+
+
+
+	****************************************************
+	****		SELECTIONS FROM MAINMENU	****
+	****************************************************
+
+
+	****************************
+	****	FREE FOR ALL	****
+	****************************
+FFA:
+	LD A,FREFRALL
+	LD (GAMETYPE),A
+
+	;assign screen format
+	;--------------------
+
+	LD DE,UNPROTECTR	;10/8/86
+
+	LD HL,RED_FFA		;handle red players only
+	LD A,(CONFIG)
+	CP 32H
+	JR Z,FFA_1
+
+
+	LD DE,UNPROTECTG	;10/8/86
+
+	LD HL,GRN_FFA		;handle grn players only
+	CP 31H
+	JR Z,FFA_1
+
+	;default = dual screen
+	LD DE,UNPROTECT2
+	LD HL,RED_GRN_FFA	;red and grn both
+
+FFA_1:
+	CALL ENTRYSCN
+	RET
+
+
+
+RED_FFA:
+	DB 0EEH,1,35,'FREE FOR ALL'
+	DB 0EEH,3,IDFLD1+11,'RED'
+	DB 0FEH,FULINT
+	DB 0FCH,0,IDFLD1,10
+	DB 0FCH,0,NMFLD1,10
+	DB 0FFH
+
+
+GRN_FFA:
+	DB 0EEH,1,35,'FREE FOR ALL'
+	DB 0EEH,3,IDFLD2+11,'GRN'	;10/8/86
+	DB 0FEH,FULINT
+	DB 0FCH,0,IDFLD2,10
+	DB 0FCH,0,NMFLD2,10
+	DB 0FFH
+
+
+RED_GRN_FFA:
+	DB 0EEH,1,35,'FREE FOR ALL'
+	DB 0EEH,3,IDFLD1+11,'RED',0EEH,3,IDFLD2+11,'GRN'
+	DB 0FEH,FULINT
+	DB 0FCH,0,IDFLD1,10
+	DB 0FCH,0,NMFLD1,10
+	DB 0FCH,0,IDFLD2,10
+	DB 0FCH,0,NMFLD2,10
+	DB 0FFH
+
+
+
+UNPROTECTR:			;10/8/86
+	DB 0FCH,0,IDFLD1,1
+	DB 0FCH,0,NMFLD1,10
+	DB 0FFH
+
+
+UNPROTECTG:			;10/8/86
+	DB 0FCH,0,IDFLD2,1
+	DB 0FCH,0,NMFLD2,10
+	DB 0FFH
+
+
+UNPROTECT2:
+	DB 0FCH,0,IDFLD1,1
+	DB 0FCH,0,NMFLD1,10
+	DB 0FCH,0,IDFLD2,1
+	DB 0FCH,0,NMFLD2,10
+	DB 0FFH
+
+
+
+	****************************
+	****	  PUBLIC	****
+	****************************
+
+PUB:
+	LD	A,PUBLIK
+	LD	(GAMETYPE),A
+
+	;assign screen format
+
+	LD DE,UNPROTECTR	;10/8/86
+
+	LD HL,RED_PUB		;handle red players only
+	LD A,(CONFIG)
+	CP 32H
+	JR Z,PUB_1
+
+
+	LD DE,UNPROTECTG	;10/8/86
+
+	LD HL,GRN_PUB		;handle grn players only
+	CP 31H
+	JR Z,PUB_1
+
+	LD DE,UNPROTECT2
+	LD HL,RED_GRN_PUB	;red and grn both
+
+PUB_1:
+	CALL ENTRYSCN
+	RET
+
+
+
+RED_PUB:
+	DB 0EEH,1,35,'PUBLIC GAME'
+	DB 0EEH,3,IDFLD1+11,'RED'
+	DB 0FEH,FULINT
+	DB 0FCH,0,IDFLD1,10
+	DB 0FCH,0,NMFLD1,10
+	DB 0FFH
+
+
+GRN_PUB:
+	DB 0EEH,1,35,'PUBLIC GAME'
+	DB 0EEH,3,IDFLD2+11,'GRN'	;10/8/86
+	DB 0FEH,FULINT
+	DB 0FCH,0,IDFLD2,10
+	DB 0FCH,0,NMFLD2,10
+	DB 0FFH
+
+
+RED_GRN_PUB:
+	DB	0EEH,1,35,'PUBLIC GAME'
+	DB	0EEH,3,IDFLD1+11,'RED',0EEH,3,IDFLD2+11,'GRN'
+	DB	0FEH,FULINT
+	DB	0FCH,0,IDFLD1,10
+	DB	0FCH,0,NMFLD1,10
+	DB	0FCH,0,IDFLD2,10
+	DB	0FCH,0,NMFLD2,10
+	DB	0FFH
+
+
+	****************************
+	****	  LEAGUE	****
+	****************************
+
+LEAG:
+	LD	A,LEAGUE
+	LD	(GAMETYPE),A
+
+	;---- assign screen format
+
+	;handle red players only
+
+	LD HL,LEAG_NM_RED	;10/9/86
+	LD (LEAG_NM_FF),HL
+
+	LD DE,UNPROTECTR	;10/8/86
+
+	LD HL,RED_LEAG
+	LD A,(CONFIG)
+	CP 32H
+	JR Z,LEAG_1
+
+	;handle grn players only
+
+	LD HL,LEAG_NM_GRN	;10/9/86
+	LD (LEAG_NM_FF),HL
+
+	LD DE,UNPROTECTG	;10/8/86
+
+	LD HL,GRN_LEAG
+	CP 31H
+	JR Z,LEAG_1
+
+	;handle both red & grn players only
+
+	LD HL,LEAG_NM_BOTH	;10/9/86
+	LD (LEAG_NM_FF),HL
+
+	LD DE,UNPROTECT2
+	LD HL,RED_GRN_LEAG
+
+LEAG_1:
+	CALL	ENTRYSCN
+
+	RET
+
+
+
+RED_LEAG:
+	DB 0EEH,1,35,'LEAGUE '
+	DB 0EEH,3,IDFLD1,'RED'
+	DB 0FEH,FULINT
+	DB 0FCH,0,IDFLD1,10
+	DB 0FCH,0,NMFLD1,10
+	DB 0FFH
+
+GRN_LEAG:
+	DB 0EEH,1,35,'LEAGUE '
+	DB 0EEH,3,IDFLD2,'GRN'	;10/8/86
+	DB 0FEH,FULINT
+	DB 0FCH,0,IDFLD2,10
+	DB 0FCH,0,NMFLD2,10
+	DB 0FFH
+
+RED_GRN_LEAG:
+	DB 0EEH,1,35,'LEAGUE '
+	DB 0EEH,3,IDFLD1,'RED',0EEH,3,IDFLD2,'GRN'
+	DB 0FEH,FULINT
+	DB 0FCH,0,IDFLD1,10
+	DB 0FCH,0,NMFLD1,10
+	DB 0FCH,0,IDFLD2,10
+	DB 0FCH,0,NMFLD2,10
+	DB 0FFH
+
+
+LEAG_NM_RED:				;10/9/86
+	DB 0EEH,1,35,'LEAGUE '
+	DB 0EEH,3,IDFLD1,'RED'
+	DB 0FEH,FULINT
+	DB 0FCH,0,NMFLD1,10
+	DB 0FFH
+
+LEAG_NM_GRN:				;10/9/86
+	DB 0EEH,1,35,'LEAGUE '
+	DB 0EEH,3,IDFLD2,'GRN'
+	DB 0FEH,FULINT
+	DB 0FCH,0,NMFLD2,10
+	DB 0FFH
+
+
+LEAG_NM_BOTH:				;10/9/86
+	DB 0EEH,1,35,'LEAGUE '
+	DB 0EEH,3,IDFLD1,'RED',0EEH,3,IDFLD2,'GRN'
+	DB 0FEH,FULINT
+	DB 0FCH,0,NMFLD1,10
+	DB 0FCH,0,NMFLD2,10
+	DB 0FFH
+
+
+	;-----------------------------------
+	;	ENTER SCNHND SUB
+	;-----------------------------------
+
+ENTRYSCN:
+
+	LD (FFUPROT),DE
+	LD (FFADR),HL
+
+	LD A,40
+	LD (LNCHARS),A
+
+	LD A,5
+	LD (FIRSTLN),A
+
+	;LASTLN = ( FIRSTLN - (MAXPLYRS/2) ) - 1
+
+	LD B,A
+	LD A,(MAXPLYRS)
+	SRL	A
+	ADD A,B
+	DEC A
+	LD (LASTLN),A
+
+	LD A,2
+	LD (SCNTYPE),A
+
+	CALL CLRSBUF
+
+	LD	HL,SCNHND
+
+	RET
+
+
+
+;	SUB TASK
+;	=====================================================
+;	======						======
+;	======		HANDLE LEAGUE NAMES		======
+;	======						======
+;	======================================================
+	;called by SCNHND
+
+LNAMES:
+	;save 1st 20 bytes of SCNBUF
+
+	LD HL,SCNBUF
+	LD DE,SCNBF2
+	LD BC,20
+	LDIR
+
+	;save current SCNHND enviro
+
+	LD HL,(FFADR)
+	LD (XFFADR),HL
+
+	LD A,(LNCHARS)
+	LD (XLNCHARS),A
+
+	LD A,(FIRSTLN)
+	LD (XFIRSTLN),A
+
+	LD A,(LASTLN)
+	LD (XLASTLN),A
+
+	;copy REDTEAM (red/grn team names) to SCNBUF
+
+	LD HL,REDTEAM
+	LD DE,SCNBUF
+	LD BC,20
+	LDIR
+
+	;init SCNHND enviro for league names
+
+	LD HL,(LEAG_NM_FF)		;10/9/86
+	LD (FFADR),HL
+
+	LD A,20
+	LD (LNCHARS),A
+
+	LD A,3
+	LD (FIRSTLN),A
+
+	LD A,3
+	LD (LASTLN),A
+
+	;position cursor at 1st scn field
+
+	CALL POSNFST
+
+	;edit team names
+
+	LD HL,TEAMMSG
+	CALL MSGOUT
+
+	CALL EDITNM
+
+	;save edited team name
+
+	LD HL,SCNBUF
+	LD DE,REDTEAM
+	LD BC,20
+	LDIR
+
+	;restore saved SCNHND enviro
+
+	LD HL,(XFFADR)
+	LD (FFADR),HL
+
+	LD HL,(XLNCHARS)
+	LD (LNCHARS),HL
+
+	LD HL,(XFIRSTLN)
+	LD (FIRSTLN),HL
+
+	LD HL,(XLASTLN)
+	LD (LASTLN),HL
+
+	;restore save 1st 20 bytes of SCNBUF
+
+	LD HL,SCNBF2
+	LD DE,SCNBUF
+	LD BC,20
+	LDIR
+
+	;position cursor at 1st scn field
+
+	CALL POSNFST
+
+	RET
+
+
+TEAMMSG: DB '   ENTER TEAM NAMES   ***  Ctrl-Q to QUIT  ***   ',03	
+
+
+
+
+

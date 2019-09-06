@@ -1,0 +1,794 @@
+	NAME	SCN
+	list	e
+	nlist	m,r,t,x
+***********************************************
+*******					*******
+*******		SCREEN HANDLER		*******
+*******					*******
+***********************************************
+
+;REVISION LOG:
+
+
+;TYPE 2 SCREEN
+
+;	initialize:
+;	FFADDR
+;	LNCHARS
+;	FIRSTLN
+;	LASTLN
+;	SCNTYPE
+;	FFUPROT
+
+;	CALL SCNHND
+
+;	rets with edited recs in buffer
+
+;---- example format file for TYPE 2 screen
+
+;FFEXAMPLE:
+;	DB 0EDH,02,06	;file type, ln chars
+
+;	headers
+;	DB 0FEH,HLFINT
+
+;	DB 0EEH,1,2,'TEST FORMAT FILE'
+;	DB 0EEH,1,14,'TYPE 2 SCREEN'
+
+;	line format. don't care ln#.
+;	DB 0FEH,FULINT	not used
+;	DB 0FCH,0,8,1
+;	DB 0FCH,0,16,2
+;	DB 0FCH,0,24,3
+;	DB 0FFH
+
+
+	PUBLIC SCNBUF,LNCHARS,SCNTYPE,FIRSTLN,LASTLN
+	PUBLIC FFADR,CLRSBUF,SCNHND,EDIT
+	PUBLIC CURSOR,MSGOUT,CHRADDR,ECHOCHR,CURFLD
+	PUBLIC HOME2,ARROWUP,ARROWDN,FIELDTAB
+	PUBLIC POSNFST
+	PUBLIC CUR_ID,CUR_NAME,CUR_NM_FLD
+	PUBLIC ARRWLF,ARRWRT,CR2
+
+	;see COLD
+	EXTRN	STATUS,TASK,TASK_REQ,GAMETYPE
+
+	;see SERIO
+	EXTRN	INTERM,OUTTERM,OUTPC
+
+	;see LASERID
+	EXTRN	LASERID
+
+	;see MENUS
+	EXTRN	LNAMES,REDTEAM,FFUPROT
+
+	;see EDITNM
+	EXTRN	EDITNM
+
+	;see ANCSUBS
+	EXTRN	ADRPAR
+
+	;see TERMBIOS
+	EXTRN	POSNCUR,CURPOSN,CLEAR_SCN,CLR_LN
+	EXTRN	CHGATTR,LNATTR
+
+	;see MENUS
+	EXTRN	TRNSFR_MENU
+
+
+	DSEG
+
+;---------- SCREEN BUFFER ----------
+
+SCNBUF:		DS 1000	;screen buffer
+
+;-------- DISPLAY CONTROL BLOCK --------
+
+FFADR:		DS 2	;format file addr
+LNCHARS:	DS 1
+FIRSTLN:	DS 1	;first variable line
+LASTLN:		DS 1	;last variable line
+SCNTYPE:	DS 1
+
+;------- used by SCNHND ---------
+
+CURSOR:		DS 2
+
+
+	FILE EQUATES.SRC
+
+	ejec
+
+
+
+
+	CSEG
+******************************************
+**					**
+**  	     SCREEN HANDLER		**
+**					**
+******************************************
+
+SCNHND:
+
+;--------------------------------------
+;	    INITIALIZATION
+;--------------------------------------
+
+	CALL CLEAR_SCN
+
+	CALL CLRSBUF
+
+	LD HL,SCNBUF	;spaces to REDTEAM/grn team names
+	LD DE,REDTEAM
+	LD BC,20
+	LDIR
+
+	LD HL,SCNTYPE
+	LD (HL),02
+
+	CALL FF2DSPLY
+
+
+;--------------------------------------
+;	EDIT SCREEN RE-ENTRY
+;--------------------------------------
+
+EDIT:
+	CALL POSNFST
+
+
+;--------------------------------------
+;	HANDLE LEAGUE TEAM NAMES
+;--------------------------------------
+
+;---- if game type LEAGUE, then handle team names
+
+	LD	A,EDITING
+	LD	(STATUS),A
+
+	LD A,(GAMETYPE)
+	CP LEAGUE
+	CALL Z,LNAMES
+
+;---------------------------------
+;	HANDLE SCREEN FIELDS
+;---------------------------------
+
+;---- if cursor out of valid field, fieldtab
+
+S0:
+	CALL CURFLD
+	CALL C,FIELDTAB
+
+
+;	SERVICE LASER FIELD 
+;	-------------------
+
+	CALL LASERID
+	JR C,S2		;ctrl-Q entered in LASERID
+			;quit edit
+
+
+;	SERVICE NAME FIELD
+;	------------------
+
+S01:
+	LD A,(CURSOR)	;confirm in name field
+
+	CP NMFLD1
+	JR Z,S011	;yes
+
+	CP NMFLD2
+	JP NZ,S0	;no
+
+S011:	LD HL,NAMEMSG
+	CALL MSGOUT
+
+	CALL EDITNM
+	JP NC,S0	;ctrl-Q not entered in EDNAME
+
+
+	;return to task handler
+	;----------------------
+
+S2:	LD HL,TRNSFR_MENU
+
+	RET
+
+
+NAMEMSG:
+	DB ' ENTER PHOTON WARRIOR NAME  ',03
+
+
+
+
+
+****************************************************
+****	    SCREEN HANDLER TASK SUBS		****
+****************************************************
+
+
+
+;===================================================
+;====	POSITION CURSOR AT FIRST SCREEN FIELD	====
+;===================================================
+
+POSNFST:
+	CALL FSTCOL
+
+	LD A,(FIRSTLN)
+	LD D,A		;ln#
+	LD (CURSOR),DE
+	CALL POSNCUR
+
+	RET
+
+
+;=========================================
+;====	DISPLAY TYPE 2 SCRN FORMAT FILE
+;=========================================
+
+FF2DSPLY:
+		LD DE,(CURSOR)
+		PUSH DE
+
+	LD C,HLFINT
+	CALL CHGATTR
+
+;format screen
+	LD HL,(FFADR)
+	DEC HL
+
+FH1:	INC HL
+	LD A,(HL)	;get byte from format
+			;file
+	;IF EOF, THEN return.
+	CP 0FFH
+	JP Z,FF2EXIT	;>>>>>>>>>>>
+
+	;CK FOR TEXT DISPLAY CODE (0FDH, 0EEH)
+	;IF encountered, THEN cont. ELSE go get
+	;next file byte
+	CP 0FDH
+	JR Z,FH3
+	CP 0EEH
+	JR NZ,FH1	;no text dsply code
+
+FH3:	;---------------------
+	;TEXT CODE ENCOUNTERED
+	;---------------------
+	;position cursor at text display addr
+	INC HL		;point to line#
+	LD D,(HL)
+	INC HL		;point to col#
+	LD E,(HL)
+		PUSH HL
+	CALL POSNCUR
+		POP HL
+FH31:	;get char(s) and display until a file
+	;code is encountered
+
+	INC HL
+	LD A,(HL)
+
+	;ck for a file code
+	AND 0E0H
+	CP 0E0H
+	DEC HL
+	JR Z,FH1	;end of dsply text
+
+	;display char
+	INC HL
+	LD A,(HL)
+		PUSH HL
+	CALL CHAROUT
+		POP HL
+	JR FH31
+
+FF2EXIT:
+	LD C,FULINT
+	CALL CHGATTR
+
+		POP DE
+		LD (CURSOR),DE
+	RET
+
+
+
+;=========================================
+;==	CK FOR CURSOR WITHIN A FIELD
+;== exit: SCF set if not in a field
+;=========================================
+
+CURFLD:
+	CALL CF00
+	RET NC		;cur in fld >>>>>>>
+
+	LD DE,(CURSOR)
+	INC E
+	CALL CF0
+	JR C,CURFLD1
+	LD DE,(CURSOR)
+	INC E
+	CALL POSNCUR
+ 	RET
+
+CURFLD1:
+	LD DE,(CURSOR)
+	DEC E
+	CALL CF0
+	RET C		;cannot move cur into field
+	LD DE,(CURSOR)
+	DEC E
+	CALL POSNCUR
+ 	RET
+
+CF00:	LD DE,(CURSOR)
+
+CF0:	LD HL,(FFUPROT)
+
+	DEC HL
+CF01:	INC HL
+	LD A,(HL)	;get format file byte
+
+	;ck for EOF
+	CP 0FFH
+	SCF
+	RET Z		;cur not in a field >>>
+
+	;CK FOR VARIABLE CODE
+	CP 0FAH
+	JR Z,CF03
+	CP 0FBH
+	JR Z,CF03
+	CP 0FCH
+	JR NZ,CF01
+
+	;variable load code found
+	;------------------------
+CF03:	;get variable's col addr from FF
+	INC HL
+	INC HL
+	LD A,(HL)
+
+	;get variables's string length
+	INC HL
+	LD B,(HL)
+
+	OR A		;clr CF
+CF05:	;compare variable cols with cur's
+	;--------------------------------
+	CP E
+	RET Z		;match found >>>>>>>>>
+	INC A		;inc var col#
+	;check that all chars in variable col
+	;string have been compare with cur col
+	DJNZ CF05
+
+	JP CF01	;go get next format
+			;file byte
+
+
+;=========================================
+;==   FIRST COL# FROM (FFADR) to E
+;=========================================
+FSTCOL:
+	LD HL,(FFADR)
+	DEC HL
+FC01:	INC HL
+	LD A,(HL)	;get format file byte
+
+	CP 0FFH		;ck for EOF
+	RET Z		;>>>>>>>>>
+
+	CP 0FAH		;CK FOR VARIABLE CODE
+	JR Z,FC03
+	CP 0FBH
+	JR Z,FC03
+	CP 0FCH
+	JR NZ,FC01
+
+	;variable load code found
+FC03:	INC HL	;get var's col addr from FF
+	INC HL
+	LD E,(HL)
+
+	RET
+
+
+;=========================================
+;==	SCNBUF LINE ADDRESS
+;== entry: HL = SCNBUF line#
+;== exit:  HL = line address
+;=========================================
+
+LNADDR:	PUSH HL
+	POP BC
+	LD HL,SCNBUF
+	LD A,(LNCHARS)
+	LD E,A
+	LD D,0
+
+	DEC BC
+LN1:	LD A,B
+	OR C
+	RET Z		;>>>>>>>>>>>
+
+	ADD HL,DE
+	DEC BC
+	JR LN1
+
+
+;=========================================
+;==	GET SCNBUF CHAR ADDRESS
+;== exit: HL= address  CF set if error
+;=========================================
+
+CHRADDR:
+	LD DE,(CURSOR)
+	LD HL,(FFADR)
+	LD C,0
+	DEC HL
+CA01:	INC HL
+	LD A,(HL)	;get format file byte
+
+	CP 0FFH		;ck for EOF
+	SCF
+	RET Z		;>>>>>> ERROR >>>>>
+
+	CP 0FAH		;CK FOR VARIABLE CODE
+	JR Z,CA03
+	CP 0FBH
+	JR Z,CA03
+	CP 0FCH
+	JR NZ,CA01
+
+	;variable load code found
+	;------------------------
+CA03:	;get variable's col addr from FF
+	INC HL
+	INC HL
+	LD A,(HL)
+
+	;get variables's string length
+	INC HL
+	LD B,(HL)
+
+CA05:	;compare variable cols with cur's
+	;--------------------------------
+	CP E
+	JR Z,CA06	;match found
+	INC A		;inc var col#
+	;check that all chars in variable col
+	;string have been compare with cur col
+	INC C
+	DJNZ CA05
+
+	JP CA01	;go get next format
+			;file byte
+
+CA06:	;line chars counted.
+		PUSH BC
+	;SCNBUF ln# = cursor ln# -FIRSTLN
+	LD A,(CURSOR+1)
+	PUSH	AF
+	LD A,(FIRSTLN)
+	LD E,A
+	POP AF
+	SUB	E
+	INC A
+	LD	L,A
+	LD	H,0
+	CALL LNADDR
+		POP BC
+	LD B,0
+	ADD HL,BC
+	XOR A		;clr CF
+	RET
+
+
+;=========================================
+;==	CLEAR SCREEN BUFFER
+;=========================================
+
+CLRSBUF:
+	LD	BC,SCNLEN-1
+	LD	HL,SCNBUF
+	LD	DE,SCNBUF+1
+	LD	A,20H
+	LD	(HL),A
+	LDIR
+	RET
+
+
+;=========================================
+;==	ECHO CHAR IN A
+;=========================================
+
+ECHOCHR:
+	CALL CHAROUT
+	LD DE,(CURSOR)
+	INC E
+	LD (CURSOR),DE
+	RET
+
+
+
+;=========================================
+;==	      MESSAGE OUT		==
+;== HL=mssg addr			==
+;=========================================
+
+MSGOUT:
+		PUSH	HL
+	LD	DE,(CURSOR)
+		PUSH	DE
+
+	LD	D,MSGLN
+	LD	E,01
+	CALL	POSNCUR
+		POP	DE
+	LD	(CURSOR),DE
+
+	;clear from cursor to end of line
+
+	CALL CLR_LN
+
+MO1:
+	;reverse video
+
+	LD A,RVRS
+	CALL LNATTR 
+
+MO2:		POP	HL		
+	LD A,(HL)
+	INC	HL
+	CP 03
+	JR	Z,MOEXIT	
+		PUSH HL
+	CALL CHAROUT
+	JR	MO2
+MOEXIT:
+
+	;restore normal video
+
+	LD A,NORM
+	CALL LNATTR 
+
+	LD	DE,(CURSOR)
+	CALL	POSNCUR
+	RET
+
+
+
+
+****************************************************
+****		    SCREEN TASKS		****
+****************************************************
+
+
+;===========================================
+;==		HOME CURSOR
+;===========================================
+HOME2:
+	CALL POSNFST
+	RET
+
+;===========================================
+;==		CR2
+;===========================================
+CR2:
+	LD DE,(CURSOR)
+	LD A,(LASTLN)
+
+	CP D
+	JP Z,CRZ2	;cur at last var scn ln
+
+	LD A,(CURSOR+1)	;LF
+	INC A
+	LD (CURSOR+1),A
+	JR CRZ2
+
+CRZ2:	LD DE,(CURSOR)
+	CALL FSTCOL
+	CALL POSNCUR
+
+	RET
+
+
+;=========================================
+;==		FIELD TAB		==
+;=========================================
+FIELDTAB:
+	LD DE,(CURSOR)
+	LD B,E		;cur col# to A
+	LD HL,(FFADR)
+
+	DEC HL
+FT01:	INC HL
+	LD A,(HL)	;get format file byte
+
+	;ck for EOF
+	CP 0FFH
+	JR NZ,FTX
+
+	;cursor pass last field start. CRLF
+	CALL CR2
+	RET		;>>>>>>>>>>>>
+
+FTX:	;CK FOR VARIABLE CODE
+	CP 0FAH
+	JR Z,FT03
+	CP 0FBH
+	JR Z,FT03
+	CP 0FCH
+	JR NZ,FT01
+
+	;variable load code found
+	;------------------------
+FT03:	INC HL	;get var's col addr from FF
+	INC HL
+	LD E,(HL)
+	LD A,B
+	CP E
+
+	JR NC,FT01	;var fld start not >cur
+
+	;---- TAB
+	LD A,(CURSOR+1)
+	LD D,A
+	CALL POSNCUR
+	RET
+
+;==========================================
+;==		DOWN ARROW
+;==========================================
+ARROWDN:
+	LD DE,(CURSOR)
+	LD A,(LASTLN)
+	CP D
+	RET Z	;cur at last var ln >>>>>>>>>>
+
+	LD DE,(CURSOR)
+	INC D
+	CALL POSNCUR
+	XOR A		;clr CF
+	RET
+
+
+;==========================================
+;==		UP ARROW
+;==========================================
+ARROWUP:
+	LD DE,(CURSOR)
+	LD A,(FIRSTLN)
+	CP D
+	RET Z	;cur ln = first var ln
+
+	; cur ln > FIRSTLN
+	LD DE,(CURSOR)
+	DEC D
+	CALL POSNCUR
+	RET
+
+
+;=========================================
+;==		RIGHT ARROW
+;=========================================
+ARRWRT:	LD DE,(CURSOR)
+	LD A,80
+	CP E
+	RET Z	;cursor at col 80
+
+	INC E
+	CALL POSNCUR
+	RET
+
+
+;==========================================
+;==		LEFT ARROW
+;==========================================
+ARRWLF:	LD DE,(CURSOR)
+	LD A,1
+	CP E
+	RET Z	;cursor at col 1
+
+	DEC E
+	CALL POSNCUR
+	RET
+
+
+;===========================================
+;====	CONFIRM CURSOR AT START OF	====
+;====	AN ID FIELD			====
+;===========================================
+;exit: Z set if cursor at ID field start
+;	else CF clear
+
+CUR_ID:
+	LD A,(CURSOR)
+
+	CP IDFLD1
+	RET Z
+
+	CP IDFLD2
+	RET
+
+
+
+;===========================================
+;====	CONFIRM CURSOR AT START OF	====
+;====	A NAME FIELD			====
+;===========================================
+;exit: Z set if cursor at name field start
+;	else CF clear
+
+CUR_NAME:
+	SCF
+	LD A,(CURSOR)
+
+	CP NMFLD1
+	RET Z
+
+	CP NMFLD2
+	RET
+
+
+
+;===========================================
+;====	CONFIRM CURSOR IN NAME FIELD	====
+;===========================================
+;exit: CF set if cursor NOT in name field
+;	else CF clear
+
+CUR_NM_FLD:
+
+	LD A,(CURSOR)
+
+	CP NMFLD1
+	JR C,CNF1_2
+
+	CP NMFLD1+10
+	JR C,CNF1_1
+
+	CP NMFLD2
+	JR C,CNF1_2
+
+	CP NMFLD2+10
+
+	JR NC,CNF1_2
+
+	;in field
+CNF1_1:
+	OR A
+	RET
+
+	;not in field
+CNF1_2:
+	SCF
+	RET
+
+
+
+
+;==========================================
+;==	CHARIN & CHAROUT BIOS
+;==========================================
+
+CHARIN:
+	CALL INTERM
+	RET
+
+CHAROUT:
+	CALL OUTTERM
+	RET
+
+
+
+
+
+
+
+

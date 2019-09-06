@@ -1,0 +1,243 @@
+
+	NAME	GUN
+	LIST	E
+	NLIST	M,R,T,X
+
+
+;DESCRIPTION:
+;	prompts operator to insert gun if gun not inserted
+;	while gun remains inserted
+;		sends to gun:	BARKER code
+;				not BARKER code
+;				pod IR code
+;				pod slot #
+;				gametype ANDed with 2FH for beta
+;				check sum
+;	end while
+;	returns to caller
+
+;REVISION LOG:
+;	8-20-86 DSe
+;	moved equates to EQUATES
+;	terminate gun load when gun withdrawn
+
+;	9-16-86 DSe
+;	convert to load gun for beta system
+
+;	10-5-86 DSe
+;	changed beta game type from mask with 2Fh to mask with CFh
+
+
+	PUBLIC	GUN
+
+	;see SCN
+	EXTRN	MSGOUT,CURSOR,FIRSTLN
+
+	;see MENUS
+	EXTRN	GAMETYPE,ALPHA
+
+	;see ???
+	EXTRN	CKSUM,DOCS
+
+	;see SERIO
+	EXTRN	INTERM,TERMST
+
+
+BARK	EQU	9DH	'BARKER code
+NOTBARK	EQU	62H	'not BARKER
+
+
+	DSEG
+
+PLYR_OFFSET:	DS 1
+IR_CODE_START:	DS 1
+SLOT_NO_START:	DS 1
+
+
+	FILE EQUATES.SRC
+
+
+	CSEG
+
+****************************************************************
+******							  ******
+******			GUN  BETA SYSTEM		  ******
+******							  ******
+****************************************************************
+;entry: cursor must be in a name field
+
+
+GUN:
+	;"INSERT LASER GUN"
+
+	LD	HL,MSGGUN
+	CALL	GUN_STAT
+	CALL	Z,MSGOUT
+
+	CALL	CKGUNIN			; MAKE SURE GUN INSERTED
+
+	;"REMOVE GUN WHEN LOADED"
+
+	LD	HL,MSGGUN2
+	CALL	MSGOUT
+
+
+	;	--------------
+	;	INITIALIZATION
+	;	--------------
+
+	;	PLAYER OFFSET TO (PLYR_OFFSET)
+	;	------------------------------
+
+	LD	HL,FIRSTLN	;first line of screen player
+	LD	A,(CURSOR+1)	;get cursor line #
+	SUB	(HL)
+	LD (PLYR_OFFSET),A
+
+
+	;	SET OFFSET STARTING POINTS
+	;	--------------------------
+
+	;starting IR code for red players
+
+	LD A,42H
+	LD (IR_CODE_START),A
+
+	;starting slot # for red players
+
+	LD A,4
+	LD (SLOT_NO_START),A
+
+
+	;if cursor in green name field, then re-assign
+	;offset starts
+
+	LD	A,(CURSOR)
+	CP	NMFLD2
+	JR	C,LOAD_GUN	;not in green name field
+
+	;starting IR code for grn players
+
+	LD A,80H
+	LD (IR_CODE_START),A
+
+	;starting slot # for grn players
+
+	LD A,30
+	LD (SLOT_NO_START),A
+
+
+	;----------------------
+	;	LOAD GUN
+	;----------------------
+
+LOAD_GUN:
+
+	;	clear check sum
+	;	---------------
+
+	XOR	A
+	LD	(CKSUM),A
+
+
+	;	BARKER code to gun
+	;	--------------------
+
+	LD	A,BARK			; BARKER CODE
+	CALL	DOCS			; PERFORM CHECKSUM
+	CALL	OUTGUN			; OUTPUT TO GUN
+
+	;	not BARKER code to gun
+	;	-----------------------
+
+	LD	A,NOTBARK		; /BARKER CODE
+	CALL	DOCS
+	CALL	OUTGUN
+
+
+	;	IR CODE OUT
+	;	-----------
+
+	LD HL,PLYR_OFFSET
+	LD A,(IR_CODE_START)
+	ADD A,(HL)
+
+	CALL	DOCS
+	CALL	OUTGUN
+
+
+	;	SLOT # OUT
+	;	----------
+
+	LD HL,PLYR_OFFSET
+	LD A,(SLOT_NO_START)
+	ADD A,(HL)
+
+	CALL	DOCS
+	CALL	OUTGUN
+
+
+	;	GAME TYPE TO GUN
+	;	----------------
+
+	LD	A,(GAMETYPE)
+	AND	0CFH			;make Cn for BETA
+	CALL	DOCS
+	CALL	OUTGUN
+
+
+	;	CHECKSUM TO GUN
+	;	----------------
+
+	LD	A,(CKSUM)		; GET CKSUM
+	CALL	OUTGUN			; SEND CKSUM
+
+
+	;	TERMINATE GUN LOAD WHEN GUN WITHDRAWN
+	;	--------------------------------------
+
+	CALL GUN_STAT
+	RET Z			;>>>>> GUN WITHDRAWN >>>>>>>
+
+	JP	LOAD_GUN
+
+
+;--------------------------------------------------------------
+;			TASK SUBS
+;--------------------------------------------------------------
+
+CKGUNIN:
+	LD	A,(SFAT)		; GET HOLSTER STATUS
+	AND	08			; CHECK FOR GUN
+	JR	Z,CKGUNIN		; IF NO GUN, LOOP
+	LD	B,0			; DELAY FOR A SHORTSHORT
+DLY:	DJNZ	DLY
+	RET				; GO BACK !!!!!
+
+
+GUN_STAT:
+	LD	A,(SFAT)		; GET STATUS
+	AND	08
+
+	RET
+
+
+OUTGUN:
+		PUSH	AF
+OUTGUN1:
+	LD	A,(SFAT)
+	AND	80H		'ck uart txmt done
+	JR	Z,OUTGUN1
+		POP	AF
+	LD	(IR),A
+
+	RET
+
+
+MSGGUN:
+	DB	'  INSERT PHASER   ',03
+
+MSGGUN2:
+	DB	'  REMOVE PHASER WHEN LIGHT ON POD IS ACTIVATED   ',03
+
+

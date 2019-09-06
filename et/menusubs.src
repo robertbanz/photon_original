@@ -1,0 +1,364 @@
+	NAME MENUSUBS
+	LIST E
+	NLIST M,R,T,X
+
+	;DSe 8-19-86
+	*****************************************************
+	*****						*****
+	*****		MENU TASK SUBS			*****
+	*****						*****
+	*****************************************************
+
+
+	PUBLIC	GETSELECTION,DSPLYFF,SELECTTBL,FFGET
+	PUBLIC	CLR_MSG_AREA
+
+	;see SERIO
+	EXTRN	INTERM,OUTTERM
+
+	;see TERMBIOS
+	EXTRN	POSNCUR,LNATTR,CHGATTR,CLR_FROM_CUR
+
+	;see SCN
+	EXTRN	CURSOR
+
+
+	DSEG
+
+SELECTTBL:	DS 2
+FFGET:		DS 2
+
+	FILE EQUATES.SRC
+
+	ejec
+
+
+
+
+	CSEG
+
+	*****************************************************
+	*****						*****
+	*****		MENU TASK SUBS			*****
+	*****						*****
+	*****************************************************
+
+
+
+	;===========================================
+	;====	GET SELECTION, CALL SELECTION	====
+	;===========================================
+
+GETSELECTION:
+	;cursor to 1st selectable
+	LD HL,(FFGET)
+	DEC HL
+SEL1:	INC HL
+	LD A,(HL)
+	CP 0FDH
+	JR NZ,SEL1
+	;selectable found, posn cursor
+	INC HL	;get ln#
+	LD D,(HL)
+	INC HL	;get col#
+	LD E,(HL)
+	DEC E
+	DEC E
+	CALL POSNCUR
+	LD	A,BLINK			; ERS
+	CALL	LNATTR			; ERS
+
+GET:	;get selction
+	CALL CHARIN
+
+GET10:	;ck KB entry
+
+	CP UPARROW
+	JP Z,UPA
+	CP DNARROW
+	JP Z,DNA
+	CP ENTER
+	JP Z,ENTR
+	JR GET
+
+;	-----------------------
+;		UP ARROW
+;	-----------------------
+
+UPA:	;search format file for user select
+	;line# < current cursor line#
+	LD DE,(CURSOR)
+	LD B,0
+	LD HL,(FFGET)
+	DEC HL
+UPA1:	INC HL
+	LD A,(HL)
+
+	CP 0FFH
+	JR Z,UPAEOF	;EOF
+
+	;ck for user select mark
+	CP 0FDH
+	JR NZ,UPA1
+
+	;select mark found
+	INC HL		;move to line#
+	LD A,(HL)
+	CP D
+	JR NC,UPA1
+
+	;select ln# < cursor ln# found
+	;-----------------------------
+	LD B,(HL)	;save line#
+	INC HL
+	LD C,(HL)	;save col#
+	JP UPA1
+
+
+UPAEOF:	;if B=0, then no line was found, exit.
+	LD A,B
+	OR A
+	JR Z,UPAEXIT
+		PUSH BC
+	;make current cursor line normal
+	LD DE,(CURSOR)
+	CALL POSNCUR
+	LD A,NORM
+	CALL LNATTR
+
+	;position cursor to select ln
+	;and blink same
+		POP BC
+	LD D,B
+	LD E,C
+	DEC E
+	DEC E
+	CALL POSNCUR
+	LD A,BLINK
+	CALL LNATTR
+
+UPAEXIT:	JP GET
+
+;	------------------------
+;		DOWN ARROW
+;	------------------------
+DNA:	;search format file for user select
+	;line# > current cursor line#
+	LD DE,(CURSOR)
+	LD HL,(FFGET)
+	DEC HL
+DNA1:	INC HL
+	LD A,(HL)
+
+	CP 0FFH
+	JR Z,DNAEXIT		;EOF
+
+	;ck for user select mark
+	CP 0FDH
+	JR NZ,DNA1
+
+	;select mark found
+	INC HL		;move to line#
+	LD A,D		;cursor ln#
+	CP (HL)
+	JR NC,DNA1
+
+	;select ln# < cursor ln# found
+	;-----------------------------
+		PUSH HL
+	;make current cursor line normal
+	LD DE,(CURSOR)
+	CALL POSNCUR
+	LD A,NORM
+	CALL LNATTR
+
+	;position cursor to select ln
+	;and blink same
+		POP HL
+	LD D,(HL)
+	INC HL
+	LD E,(HL)
+	DEC E
+	DEC E
+	CALL POSNCUR
+	LD A,BLINK
+	CALL LNATTR
+
+DNAEXIT:	JP GET
+
+;	----------------------
+;		ENTER
+;	----------------------
+ENTR:
+	;parser task name
+	LD DE,(CURSOR)
+	LD C,D
+	LD HL,(SELECTTBL)
+	CALL ADRPAR
+	JP C,GET	;no task assigned
+
+	;call selected task
+	LD DE,GETRET
+		PUSH DE
+	JP (HL)
+
+GETRET:
+		PUSH AF
+	CALL CLR_MSG_AREA
+		POP AF
+	RET
+
+
+	;===========================================
+	;====	    DISPLAY FORMAT FILE		====
+	;===========================================
+
+DSPLYFF:
+	;format screen
+	;-------------
+	LD HL,(FFGET)
+	DEC HL
+
+DFF1:	INC HL
+	LD A,(HL)	;get byte from format
+			;file
+	;IF EOF, THEN return.
+	CP 0FFH
+		RET Z		;>>>>>>>>>>>
+
+	;CK FOR DISPLAY ATTRIBUTES (0FEH code)
+	;IF encountered,get attributes to REG C
+	;and go get next file byte. ELSE cont
+
+	CP 0FEH
+	JR NZ,DFF2
+
+	INC HL
+	LD C,(HL)
+		PUSH HL
+	CALL CHGATTR
+		POP HL
+	JR DFF1
+
+DFF2:	;CK FOR TEXT DISPLAY CODE (0FDH, 0EEH)
+	;IF encountered, THEN cont ELSE go get
+	;next file byte
+	CP 0FDH
+	JR Z,DFF3
+	CP 0EEH
+	JR NZ,DFF1	;no text dsply code
+
+DFF3:	;---------------------
+	;TEXT CODE ENCOUNTERED
+	;---------------------
+	;position cursor at text display addr
+	INC HL		;point to line#
+	LD D,(HL)
+	INC HL		;point to col#
+	LD E,(HL)
+		PUSH HL
+	CALL POSNCUR
+		POP HL
+DFF31:	;get char(s) and display until a file
+	;code is encountered
+	INC HL
+	LD A,(HL)
+
+	;ck for a file code
+	AND 0E0H
+	CP 0E0H
+	DEC HL
+	JR Z,DFF1	;end of dsply text
+
+	;display char
+	INC HL
+	LD A,(HL)
+		PUSH HL
+	CALL CHAROUT
+		POP HL
+	JR DFF31
+
+
+
+	;=========================================
+	;==	CLEAR MESSAGE AREA
+	;=========================================
+
+CLR_MSG_AREA:
+
+	LD D,20
+	LD E,1
+	CALL POSNCUR
+
+	CALL CLR_FROM_CUR
+
+		RET	;>>>>>>>>>>>>
+
+
+
+
+
+	****************************************************
+	****		ANCILLARY SUBS			****
+	****************************************************
+
+
+	;===============================================
+	;		ADDRESS PARSER			
+	;===============================================
+	;ENTRY:	C = service #
+	;	HL=TABLE ADDR where:
+	;		TABLE:	no. of table entrys
+	;			service#
+	;			ROUTINE'S ADDRESS
+	;			service#
+	;			ROUTINE'S ADDRESS
+	;			etc.
+	;EXIT:	IF PARSER SUCCESSFUL, THEN RETURNS WITH
+	;	HL=ROUTINE'S ADDRESS, A = service # &
+	;	CF=0. ELSE CF=1.
+	;USES:	AF HL DE
+	;-----------------------------------------------
+
+ADRPAR:
+	LD B,(HL)	;no. of entrys to HL
+	INC HL
+PAR0:	LD A,(HL)
+	CP C
+	JR Z,PAR1	;a match
+;NO match
+	INC HL		;move to next rec
+	INC HL
+	INC HL
+	DJNZ PAR0
+;table exhausted
+	LD A,C	;restore ASC char to A
+	SCF
+	RET	;>>>>>>>>>>>>>>>>>>>>>>
+;-----	ROUTINE'S ADDRESS TO HL
+PAR1:	INC HL
+	LD E,(HL)
+	INC HL
+	LD D,(HL)
+	EX DE,HL
+	LD A,C	;restore service# to A
+	AND A		;clear CF
+	RET	;>>>>>>>>>>>>>>>>>>>>>>>>>
+
+
+
+
+	;============================================
+	;====		CHARACTER I/O		=====
+	;============================================
+
+CHARIN:
+	CALL INTERM
+	RET
+
+
+CHAROUT:
+	CALL OUTTERM
+	RET   
+
+

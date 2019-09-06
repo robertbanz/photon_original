@@ -1,0 +1,79 @@
+
+	NAME	KEYSTART
+	LIST	E
+	NLIST	M,R,T,X
+
+	;DSe 9-20-86
+	******************************************************
+	******						******
+	******		       KEY START		******
+	******						******
+	******************************************************
+
+	PUBLIC	KEY_START
+
+	;see SCN
+	EXTRN	MSGOUT
+
+	;see MENUS
+	EXTRN	CLEAR_MENU
+
+	;see COLD
+	EXTRN	GAME_DATA,STATUS
+
+	;see SERIO
+	EXTRN	OUTPC
+
+	FILE	EQUATES.SRC
+
+	CSEG
+
+
+KEY_START:
+	;set status
+
+	LD A,AT_KEY_START
+	LD (STATUS),A
+
+	;ck field start switch
+
+	LD HL,AWAIT_SW_MSG
+	CALL MSGOUT
+
+	LD	(CLEAR),A	; RESET SWITCH
+CKAGIN:
+	LD	A,(SFAT)	; GET START SWITCH STATUS
+	AND	02		; CHECK FOR SWITCH CLOSED
+	JR	NZ,CKAGIN	; IF NOT, WAIT TIL IT IS
+
+	;----await start cmd from game computer
+
+	LD	HL,STR_CMD_MSG
+	CALL	MSGOUT
+
+	LD	A,RDY_TO_START
+	LD	(STATUS),A
+
+S2B:	CALL	GAME_DATA
+	CP	STRTCMD	
+	JR	NZ,S2B
+
+	CALL	OUTPC
+
+	;----next task
+
+	LD	HL,CLEAR_MENU
+
+	RET
+
+
+AWAIT_SW_MSG:
+	DB '  AWAITING FIELD COMMANDER START  ',03
+
+STR_CMD_MSG:
+	DB '  AWAITING GAME COMPUTER START ACKNOWLEDGE  ',03
+
+
+
+
+

@@ -1,0 +1,36 @@
+
+
+	NAME	TASKHND
+	LIST	E
+	NLIST	M,R,T,X
+
+	PUBLIC	TASK_HNDLR
+
+	;see MENUSUBS
+	EXTRN	CLR_MSG_AREA
+
+	FILE	EQUATES.SRC
+
+	CSEG
+
+	;DSe 9-20-86
+	**********************************************
+	******					******
+	******		TASK HANDLER		******
+	******					******
+	**********************************************
+	;entry:	HL = task address (label)
+
+TASK_HNDLR:
+	LD	SP,STK
+
+	CALL	CLR_MSG_AREA
+
+	;call task
+
+	LD	DE,TASK_HNDLR
+	PUSH	DE
+	JP	(HL)
+
+
+

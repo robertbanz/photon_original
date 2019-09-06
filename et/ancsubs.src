@@ -1,0 +1,103 @@
+	NAME ANCSUBS
+	LIST E
+	NLIST M,R,T,X
+
+	PUBLIC	ADRPAR,MOVE
+
+	CSEG
+********************************************
+****					****
+****	      ANCILLARY SUBS		****
+****					****
+********************************************
+
+
+;==============================================
+;		      MOVE
+;==============================================
+; ENTRY: 	HL=SOURCE START ADDRESS
+;		DE=DESTINATION START ADDRESS
+;		BC=# OF BYTES TO MOVE
+;----------------------------------------------
+MOVE:	;if BC=0, then return.(no bytes to move)
+	;--------------------------------------
+	LD A,B
+	CP C
+	RET Z		;>>>>>>>>>>>>>>>>>>>>>>
+		PUSH HL
+	OR A		;clear carry
+	SBC HL,DE
+		POP HL
+	JP C,MOV1
+
+	LDIR		;move forward
+	JR MOV2	;done
+
+MOV1:	ADD HL,BC	;point to end+1
+	DEC HL		;point to end
+	EX DE,HL
+
+	ADD HL,BC	;point to end+1
+	DEC HL		;point to end
+	EX DE,HL
+
+	LDDR		;move back
+
+MOV2:	RET		;>>>>>>>>>>>>>>>>>>
+
+
+
+
+;==============================================
+;		ADDRESS PARSER			
+;==============================================
+;ENTRY:	A = ASC char
+;	HL=TABLE ADDR where:
+;		TABLE:	no. of table entrys
+;			ASC char
+;			ROUTINE'S ADDRESS
+;			ASC char
+;			ROUTINE'S ADDRESS
+;			etc.
+;EXIT:	IF PARSER SUCCESSFUL, THEN RETURNS WITH
+;	HL=ROUTINE'S ADDRESS, A = char &
+;	CF=0. ELSE CF=1.
+;---------------------------------------------
+ADRPAR:
+	LD C,A
+
+;ck for empty table
+	LD B,(HL)	;no. of entrys to HL
+	LD A,B
+	CP 0
+	JR Z,ADREXIT
+
+	INC HL
+PAR0:	LD A,(HL)
+	CP C
+	JR Z,PAR1	;a match
+
+;NO match
+	INC HL		;move to next rec
+	INC HL
+	INC HL
+	DJNZ PAR0
+
+;table exhausted
+ADREXIT:
+	LD A,C	;restore ASC char to A
+	SCF
+	RET	;>>>>>>>>>>>>>>>>>>>>>>
+
+;-----	ROUTINE'S ADDRESS TO HL
+
+PAR1:	INC HL
+	LD E,(HL)
+	INC HL
+	LD D,(HL)
+	EX DE,HL
+	LD A,C	;restore ASC char to A
+	AND A		;clear CF
+	RET	;>>>>>>>>>>>>>>>>>>>>>>>>>
+
+
