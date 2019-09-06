@@ -1,0 +1,212 @@
+
+' -----------------------------------------------------------------------
+'|                 HOSTESS PORT DEFINITIONS                              |
+'|                                                                       |
+'|     HXDATA - RECEIVE DATA (READ) AND TRANSMIT DATA (WRITE)            |
+'|     HXINTE - INTERRUPT ENABLE REGISTER                                |
+'|     HXLINE - LINE CONTROL REGISTER                                    |
+'|     HXMODE - MODEM CONTROL REGISTER                                   |
+'|     HXSTAT - LINE STATUS REGISTER                                     |
+'|     HXMDST - MODEM STATUS REGISTER                                    |
+'|                                                                       |
+'|  BIT DEFINITIONS                                                      |
+'|     LINE STATUS REGISTER                                              |
+'|       BIT 7 - X                                                       |
+'|       BIT 6 - TSRE (Tx SHIFT REGISTER EMPTY) ACTIVE HIGH              |
+'|       BIT 5 - THRE (TRANSMITTER HOLDING REGISTER EMPTY) ACTIVE HIGH   |
+'|       BIT 4 - BI (BREAK INTERRUPT) ACTIVE HIGH                        |
+'|       BIT 3 - FE (FRAMING ERROR) ACTIVE HIGH                          |
+'|       BIT 2 - PE (PARITY ERROR) ACTIVE HIGH                           |
+'|       BIT 1 - OE (OVERRUN ERROR) ACTIVE HIGH                          |
+'|       BIT 0 - DR (DATA READY) ACTIVE HIGH                             |
+'|                                                                       |
+'|     MODEM STATUS REGISTER                                             |
+'|       BIT 7 - RLSD (RECEIVE LINE SIGNAL DETECT)                       |
+'|       BIT 6 - RI (RING INDICATOR)                                     |
+'|       BIT 5 - DSR (DATA SET READY)                                    |
+'|       BIT 4 - CTS (CLEAR TO SEND)                                     |
+'|       BIT 3 - DRLSD (DELTA Rx LINE SIGNAL DETECT)                     |
+'|       BIT 2 - TERI (TRAILING EDGE RING INDICATOR)                     |
+'|       BIT 1 - DDSR (DELTA DATA SET READY)                             |
+'|       BIT 0 - DCTS (DELTA CLEAR TO SEND)                              |
+' -----------------------------------------------------------------------
+
+
+
+
+     ' UPON ENTRY THE VARIABLE ET.NUMBER CONTAINS THE VALUE OF THE
+     ' ENTRY TERMINAL WHICH IS TO SEND THE DATA. (ALPHA OR OMEGA)
+
+14000
+
+     IF ET.NUMBER = ALPHA THEN 14020
+     IF ET.NUMBER = OMEGA THEN 14010
+     
+14010
+     ET.DATA = H4DATA           ' SET TO OMEGA VALUES
+     ET.INTE = H4INTE
+     ET.LINE = H4LINE
+     ET.MODE = H4MODE
+     ET.STAT = H4STAT
+     ET.MDST = H4MDST
+     GOTO 14030
+
+14020
+     ET.DATA = H2DATA           ' SET TO ALPHA VALUES
+     ET.INTE = H2INTE
+     ET.LINE = H2LINE
+     ET.MODE = H2MODE
+     ET.STAT = H2STAT
+     ET.MDST = H2MDST
+     
+14030
+     ON JOB GOSUB 14100,14200,14300,14400,14500
+     RETURN
+
+'-----------------------------------------------------------------
+     ' ROUTINE TO INPUT ONE BYTE OF DATA FROM SELECTED E T
+     ' DATA RETURNED AS VARIABLE    DATA.IN
+     ' IF CHECK = 1 THEN PERFORM XOR CHECKSUM, ELSE RETURN
+
+14100
+     TIMEOUT = 256 ' EXCESS OF 8 BITS
+14105
+     ST = INP(ET.STAT) AND DATA.AVAILABLE
+     IF ST = 0 THEN 14105
+     DATA.IN = INP(ET.DATA)
+'     PRINT CHR$(DATA.IN);
+     IF CHECK THEN 14110 ELSE RETURN
+14110
+     CHECK.SUM = CHECK.SUM XOR DATA.IN
+
+     RETURN
+
+'------------------------------------------------------------------
+     ' ROUTINE TO OUTPUT ONE BYTE OF DATA TO SELECTED E T 
+     ' IF ECHO.FLAG = 1 WAIT FOR ECHO, OTHERWISE DON`T WAIT FOR ECHO
+
+     ' DATA TO BE OUTPUT SHOULD BE IN VARIABLE   DATA.OUT
+
+14200
+     ST = INP(ET.STAT) AND TX.BUFFER.EMPTY
+     IF ST = 0 THEN 14200
+     OUT ET.DATA,DATA.OUT
+     IF CHECK THEN 14210 ELSE RETURN
+14210
+     CHECK.SUM = CHECK.SUM XOR DATA.IN
+     RETURN
+
+'---------------------------------------------------------------
+     ' ROUTINE TO INPUT A STRING FROM THE SELECTED ENTRY TERMINAL
+     ' THE NUMBER OF CHARACTERS IS GIVEN IN THE VARIABLE STRING.LENGTH
+     ' THE STRING IS RETURNED IN A$.
+
+14300
+     A$=" "
+          FOR Z=1 TO STRING.LENGTH
+               GOSUB 14100
+               A$=A$ + CHR$(DATA.IN)
+          NEXT Z
+     A$ = RIGHT$(A$,STRING.LENGTH)
+     RETURN
+
+
+'---------------------------------------------------------------
+     ' ROUTINE TO OUTPUT THE DATA IN STRING A$ TO THE SELECTED ENTRY
+     ' TERMINAL.   
+ 
+14400
+     DATA.OUT = ASC(LEFT$(A$,1))
+     GOSUB 14200
+          FOR Z=1 TO LEN(A$)-2
+               DATA.OUT = ASC(MID$(A$,Z+1,1))
+               GOSUB 14200
+          NEXT Z
+     DATA.OUT = ASC(RIGHT$(A$,1))
+     GOSUB 14200
+     RETURN
+
+'-----------------------------------------------------------------
+     ' ROUTINE TO TRANSFER A BLOCK OF DATA FROM THE ENTRY TERMINAL
+     '
+     ' THE DATA WILL BE SENT TO THE GAME COMPUTER IN THE FOLLOWING
+     ' FORM:
+     '
+     '            DATA              NUMBER OF BYTES
+     '         GAME TYPE                  1 
+     '         RED TEAM NAME             10
+     '         GREEN TEAM NAME           10
+     '         RED PLAYERS NAMES AND
+     '         ID NUMBERS               400
+     '         GREEN PLAYERS NAMES
+     '         AND ID NUMBERS           400
+     '         XOR CHECKSUM               1
+     '                                 ------
+     '                        TOTAL     822  BYTES
+     '
+     ' IF THE XOR CHECKSUM VERIFIES AN ACK (0F8H) WILL BE SENT TO
+     ' THE ENTRY TERMINAL.  IF NOT, A NAK (0F9H) WILL BE SENT AND 
+     ' THE ENTRY TERMINAL WILL RE-TRANSMIT THE RECORD WHEN COMMANDED.
+
+14500
+     CHECK = 1
+     CHECK.SUM = 0
+          FOR V=1 TO 821
+               GOSUB 14100
+               XFER.DATA(V) = DATA.IN
+          NEXT V
+     CHECK = 0
+     GOSUB 14100
+     XFER.DATA(822) = DATA.IN
+
+     U=1
+     ' GET THE GAME TYPE
+     GAME.TYPE = XFER.DATA(U)
+     U=U+1
+
+     ' GET RED TEAM NAME
+     STRING.LENGTH = 10
+     GOSUB 14800
+     RED.TEAM.NAME$ = A$
+
+     ' GET GREEN TEAM NAME
+     STRING.LENGTH = 10
+     GOSUB 14800
+     GREEN.TEAM.NAME$ = A$
+
+     ' GET RED PLAYERS AND THEIR ID`S
+          STRING.LENGTH = 20
+               FOR X=1 TO 20
+                    GOSUB 14800
+                    RED.PLAYER$(X) = A$
+               NEXT X
+
+     ' GET GREEN PLAYERS AND THEIR ID`S
+          STRING.LENGTH = 20
+               FOR X=1 TO STRING.LENGTH
+                    GOSUB 14800
+                    GREEN.PLAYER$(X) = A$
+               NEXT X
+
+     ' GET CHECK.SUM BYTE FROM E T
+     DATA.IN = XFER.DATA(U)
+14505
+     IF CHECK.SUM <> DATA.IN THEN 14510
+     DATA.OUT = ACK
+     GOSUB 14200
+'     print "sent ack"
+     RETURN
+14510
+     DATA.OUT = NAK
+     GOSUB 14200
+     RETURN
+
+14800
+     A$ = " "
+          FOR Z=1 TO STRING.LENGTH
+               A$ = A$ + CHR$(XFER.DATA(U))
+               U = U+1
+          NEXT Z
+     A$ = RIGHT$(A$,STRING.LENGTH)
+     RETURN
+

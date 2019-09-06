@@ -1,0 +1,12 @@
+13000 ' ROUTINE TO OUTPUT COMMAND TO CD PLAYER
+
+     OUT &H200,A+&H30                ' STROBE DATA INTO DEVICE
+          FOR X=1 TO 2000:NEXT X      ' DELAY
+     OUT &H200,A+&H20                ' TURN OFF STROBE
+          FOR X=1 TO 2000:NEXT X      ' ANOTHER DELAY
+     OUT &H200,0                     ' ENABLE OUTPUT
+          FOR X=1 TO 2000:NEXT X
+     OUT &H200,&H20                  ' DISABLE OUTPUT
+     RETURN
+
+

@@ -1,0 +1,84 @@
+
+
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'XXXX					XXXX
+	'XXXX	EFFECTS COMPUTER HANDLER	XXXX
+	'XXXX					XXXX
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+	' TRK# to EFFECTS COMPUTER protocol:
+	'	d R d U d TRK# d
+	'		d is a delay
+	'		ASCII string
+	'		TRK# is 1 thru 0 (0=TRK# 10)
+
+	' START EFFECTS COMPUTER protocol:
+	'	ASCII CR after TRK# sent
+
+	'RESET EFFECTS COMPUTER protocol
+	'	d CR d R d U d 5 d 0 d CR d
+	'		where d is a delay
+	'		ASCII string
+
+11000	'TASK SUB
+	'-------------------------------------
+	'	TRK# TO EFFECTS COMPUTER
+	'-------------------------------------
+
+	'---- delay
+	FOR XS=1 TO 300:NEXT XS
+
+	A=&H52:GOSUB 11200
+	A=&H55:GOSUB 11200
+	A=TRACK+&H30:GOSUB 11200
+
+	'---- delay
+	FOR XS=1 TO 300:NEXT XS
+
+ 	RETURN
+
+
+
+11100	'TASK SUB
+	'-------------------------------------
+	'	START EFFECTS COMPUTER
+	'-------------------------------------
+
+	A=&H0D:GOSUB 11300
+ 	RETURN
+
+
+11200	'SUPPORT SUB
+	'------------------------------------------
+	' DELAY, CK TXMT SHIFT REG EMPTY, OUT DATA
+	'------------------------------------------
+
+	FOR XS=1 TO 300:NEXT XS
+
+11210	XS=INP(H7STAT) AND &H40
+	IF XS=0 THEN 11210
+
+11300 	OUT H7DATA,A
+	RETURN
+
+
+11500	'TASK SUB
+	'-------------------------------------
+	'	RESET EFFECTS COMPUTER
+	'-------------------------------------
+
+	'---- delay
+	FOR XS=1 TO 300:NEXT XS
+
+	A=&H0D:GOSUB 11200
+	A=&H52:GOSUB 11200
+	A=&H55:GOSUB 11200
+	A=&H35:GOSUB 11200
+	A=&H30:GOSUB 11200
+	A=&H0D:GOSUB 11200
+
+	'---- delay
+	FOR XS=1 TO 300:NEXT XS
+
+ 	RETURN
+

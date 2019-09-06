@@ -1,0 +1,143 @@
+2000 ' MACHINE LANGUAGE PROGRAMS FOR POKING INTO MEMORY
+
+
+     ' ROUTINE TO MOVE ROUTINES TO MEMORY
+     DEF SEG = &H2000
+
+
+          FOR X=&H30 TO &H50
+               READ A
+               POKE X,A
+          NEXT X
+
+
+          FOR X=&H80 TO &HA0
+               READ A
+               POKE X,A
+          NEXT X
+
+            FOR X=&H100 TO &H162
+               READ A
+               POKE X,A
+          NEXT X
+     RETURN
+
+    ' ROUTINE TO REPLACE OLD ADDRESS INTO TICK INTERRUPT VECTOR
+
+     DATA &H55                :REM PUSH BP
+     DATA &H50                :REM PUSH AX
+     DATA &H51                :REM PUSH CX
+     DATA &H57                :REM PUSH DI
+     DATA &H1E                :REM PUSH DS
+     DATA &HFA                :REM CLI
+     DATA &HB9,&H00,&H00      :REM MOV CX,0
+     DATA &H8E,&HD9           :REM MOV DS,CX
+     DATA &HBF,&H70,&H0       :REM MOV DI,70H
+     DATA &HB8,&H53,&HFF      :REM MOV AX,0FF53H
+     DATA &H89,&H05           :REM MOV [DI],AX
+     DATA &HB8,&H0,&HF0       :REM MOV AX,0F000H
+     DATA &H47                :REM INC DI
+     DATA &H47                :REM INC DI
+     DATA &H89,&H05           :REM MOV [DI],AX
+     DATA &H1F                :REM POP DS
+     DATA &H5F                :REM POP DI
+     DATA &H59                :REM POP CX
+     DATA &H58                :REM POP AX
+     DATA &H5D                :REM POP BP
+     DATA &HFB                :REM STI
+     DATA &HCB                :REM RETF
+
+    ' ROUTINE TO PLACE NEW ADDRESS INTO TICK INTERRUPT VECTOR
+
+
+     DATA &H55                :REM PUSH BP
+     DATA &H50                :REM PUSH AX
+     DATA &H51                :REM PUSH CX
+     DATA &H57                :REM PUSH DI
+     DATA &H1E                :REM PUSH DS
+     DATA &HFA                :REM CLI
+     DATA &HB9,&H00,&H00      :REM MOV CX,00H
+     DATA &H8E,&HD9           :REM MOV DS,CX
+     DATA &HBF,&H70,&H0       :REM MOV DI,70H
+     DATA &HB8,&H00,&H01      :REM MOV AX,100H
+     DATA &H89,&H05           :REM MOV [DI],AX
+     DATA &HB8,&H00,&H20      :REM MOV AX,2000H
+     DATA &H47                :REM INC DI
+     DATA &H47                :REM INC DI
+     DATA &H89,&H05           :REM MOV [DI],AX
+     DATA &H1F                :REM POP DS
+     DATA &H5F                :REM POP DI
+     DATA &H59                :REM POP CX
+     DATA &H58                :REM POP AX
+     DATA &H5D                :REM POP BP
+     DATA &HFB                :REM STI
+     DATA &HCB                :REM RETF
+
+
+
+  ' ROUTINE TO INPUT DATA FROM THE SLAVE AND PUT IT IN MEMORY
+
+     DATA &H50                     :REM PUSH AX
+     DATA &H53                     :REM PUSH BX
+     DATA &H51                     :REM PUSH CX
+     DATA &H52                     :REM PUSH DX
+     DATA &H1E                     :REM PUSH DS
+     DATA &HB8,&H00,&H20           :REM MOV AX,2000H
+     DATA &H8E,&HD8                :REM MOV DS,AX
+     DATA &HBA,&H0C,&H02           :REM MOV DX,020CH
+     DATA &HEC                     :REM IN AL,DX
+     DATA &HA8,&H04                :REM TEST AL,4
+     DATA &H75,&H3A                :REM JNZ CHECK_TASK 
+     DATA &HBA,&H08,&H02           :REM MOV DX,208H
+     DATA &HEC                     :REM IN AL,DX
+     DATA &HBB,&H4,&H00            :REM MOV BX,STATUS
+     DATA &H88,&H07                :REM MOV [BX],AL
+     DATA &H3C,&HCA                :REM CMP AL,GSYNC
+     DATA &H75,&H2D                :REM JNZ CHECK_TASK
+                        'GET_DATA:
+     DATA &HBB,&H00,&H00           :REM MOV BX,0
+     DATA &H8B,&H0F                :REM MOV CX,[BX]
+     DATA &HBB,&H00,&H02           :REM MOV BX,200h
+     DATA &H09,&HC9                :REM OR CX,CX
+     DATA &H74,&H05                :REM JZ GET_DATA2
+                        'GET_DATA1:
+     DATA &H83,&HC3,&H38           :REM ADD BX,38H
+     DATA &HE2,&HFB                :REM LOOP GET_DATA1
+                        'GET_DATA2:
+     DATA &HB9,&H38,&H0           :REM MOV CX,38H
+                        'GET_DATA3:
+     DATA &HBA,&H0C,&H02           :REM MOV DX,20CH
+                        'GET_DATA4:
+     DATA &HEC                     :REM IN AL,DX
+     DATA &HA8,&H04                :REM TEST AL,4
+     DATA &H75,&HFB                :REM JNZ GET_DATA4
+     DATA &HBA,&H08,&H02           :REM MOV DX,208H
+     DATA &HEC                     :REM IN AL,DX
+     DATA &H88,&H07                :REM MOV [BX],AL
+     DATA &H43                     :REM INC BX
+     DATA &HE2,&HEF                :REM LOOP GET_DATA3
+     DATA &HBB,&H00,&H00           :REM MOV BX,0
+     DATA &H8B,&H07                :REM MOV AX,[BX]
+     DATA &H40                     :REM INC AX
+     DATA &H89,&H07                :REM MOV [BX],AX
+                        'CHECK_TASK:
+     DATA &HBB,&H05,&H00           :REM MOV BX,TASK
+     DATA &H8A,&H07                :REM MOV AL,[BX]
+     DATA &H3C,&H00                :REM CMP AL,0
+     DATA &H74,&H08                :REM JZ FINIS
+     DATA &HBA,&H04,&H02           :REM MOV DX,204H
+     DATA &HEE                     :REM OUT DX,AL
+     DATA &HB0,&H00                :REM MOV AL,0
+     DATA &H88,&H07                :REM MOV [BX],AL
+                        'FINIS:
+     DATA &H1F                     :REM POP DS
+     DATA &H5A                     :REM POP DX
+     DATA &H59                     :REM POP CX
+     DATA &H5B                     :REM POP BX
+     DATA &H58                     :REM POP AX
+     DATA &HCF                     :REM IRET
+
+
+
+
+

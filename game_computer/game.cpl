@@ -1,0 +1,599 @@
+
+
+
+
+
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'XXXX						XXXX
+	'XXXX		   GAME MODULE			XXXX
+	'XXXX						XXXX
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+'	D. SELLARI 01-04-86	LASTEST REVISION 05-21-86
+
+'	EXTERNAL INITILAZATION REQUIRED:
+'		SLAVE reset
+'		GAME.NUMBER=0	(see EQUATES)
+'		SEQ.NO=0	(see EQUATES)
+
+
+
+3000	'--------------------------------------------------
+	'		GAME INITIALIZATION
+ 	'--------------------------------------------------
+
+	'	SELECT SCREEN 0
+	'	---------------
+	SCREEN ,,0,0
+
+	'	GAME SIGN ON MESSAGE
+	'	--------------------
+	GOSUB 20050		'scrn dance
+	GOSUB 20040
+
+	'	BUILD SCREENS
+	'	-------------
+	GOSUB 20400
+	GOSUB 20500
+	SCREEN ,,0,0
+
+	'	CHECK FOR CHANGE IN ET(s) PRESENT
+	'	---------------------------------
+	TEST = INP(ALPHA.MODEM.STATUS) AND ALPHA.PRESENT
+	IF TEST <> ALPHA.TERMINAL THEN 1240
+	TEST = INP(OMEGA.MODEM.STATUS) AND OMEGA.PRESENT
+	IF TEST <> OMEGA.TERMINAL THEN 1240
+
+
+	'	ASSIGN GAME #
+	'	-------------
+	GAME.NUMBER = GAME.NUMBER + 1
+
+
+	'	ASSIGN TRK#'s
+	'	-------------
+
+	SEQ.NO = SEQ.NO +1
+
+	IF SEQ.NO < 1 THEN SEQ.NO =1
+	IF SEQ.NO > SEQ.LNG THEN SEQ.NO=1
+
+
+	'	CLEAR SCORING ARRAYS
+	'	--------------------
+
+	DEF SEG=&H2000
+          FOR X=0 TO &Hf
+               POKE X,0
+          NEXT X
+	DEF SEG
+
+
+	FOR X=1 TO 46
+        	SCORE(X)=0
+		BASE.HITS(X)=0
+		PLAYING(X)=0
+		HIT.CNT(X)=0
+	NEXT X
+
+
+	GOSUB 7150
+	MONO.WB$="<<<<<<<<<  NEW GAME  >>>>>>>>>":GOSUB 7000
+	GOSUB 7150
+
+
+	'--------------------------------------------------
+	'	TRK# TO CD, LASER AND EFFECTS COMPUTERS
+	'--------------------------------------------------
+
+	A=CD.SEQ(SEQ.NO)
+	GOSUB 13000
+
+	TRACK=EFFECTS.LASER.SEQ(SEQ.NO)
+	GOSUB 11000
+	GOSUB 12000
+
+	MONO.WB$="TRACK # TO CD, LASER & EFFECTS":GOSUB 7000
+
+
+3100	'--------------------------------------------------
+	'		PSYNC TO SLAVE
+	'--------------------------------------------------
+
+	MONO.WB$ = "AWAITING SLAVE PSYNC ACKN":GOSUB 7000
+
+	DEF SEG=&H2000
+	POKE TASK,PSYNC  
+
+3102	'---- AWAIT PSYNC ACKN
+
+	IF PEEK(STATUS)<>PSYNC THEN 3102
+	DEF SEG
+
+	MONO.WB$= "SLAVE ACKNOWLEDGE RECEIVED": GOSUB 7000
+
+3200	'---------------------------------------------------
+	' THIS PORTION OF CODE IS RESPONSIBLE FOR INPUTTING
+	' DATA FROM ONE OR BOTH OF THE ENTRY TERMINALS
+	'---------------------------------------------------
+	'	INIT
+	'	----
+
+	GOSUB 7150	' CR/LF
+
+	ET.STATUS=0	'bit 0 ALPHA block transfer done
+			'bit 1 ALPHA ready to start
+			'bit 2 OMEGA block transfer done
+			'bit 3 OMEGA ready to start
+
+	M1$ = "AWAITING ET CODES"
+	M2$ = "AWAITING ALPHA CODES"
+	M3$ = "AWAITING ALPHA START"
+	M4$ = "AWAITING OMEGA CODES"
+	M5$ = "AWAITING OMEGA START"
+	M6$ = "AWAITING ET STARTS"
+
+
+3210	'	DISPLAY STATUS MESSAGES
+	'	-----------------------
+  
+	IF ALPHA.TERMINAL<>0 AND OMEGA.TERMINAL=0 THEN 3212
+	IF ALPHA.TERMINAL=0 AND OMEGA.TERMINAL<>0 THEN 3214
+
+	'---- both ETs present
+
+	IF ET.STATUS=&H00 THEN MESSAGE$=M1$
+	IF ET.STATUS=&H01 THEN MESSAGE$=M4$
+	IF ET.STATUS=&H03 THEN MESSAGE$=M4$
+	IF ET.STATUS=&H04 THEN MESSAGE$=M2$
+	IF ET.STATUS=&H05 THEN MESSAGE$=M6$
+	IF ET.STATUS=&H07 THEN MESSAGE$=M5$
+	IF ET.STATUS=&H0C THEN MESSAGE$=M2$
+	IF ET.STATUS=&H0D THEN MESSAGE$=M3$
+
+	IF ET.STATUS=&H05 THEN SCREEN ,,1,1	'man phasers scn
+	IF ET.STATUS=&H0F THEN GOTO 3300	'>>>>>>>>>>
+
+	GOSUB 6000
+	MONO.WB$=MESSAGE$:GOSUB 7000
+
+	GOTO 3220
+
+3212	'---- only ALPHA ET present
+
+	IF ET.STATUS=&H00 THEN MESSAGE$=M2$
+	IF ET.STATUS=&H01 THEN MESSAGE$=M3$
+
+	IF ET.STATUS=&H01 THEN SCREEN ,,1,1	'man phasers scn
+	IF ET.STATUS=&H03 THEN GOTO 3300	'>>>>>>>>>>
+
+	GOSUB 6000
+	MONO.WB$=MESSAGE$:GOSUB 7000
+
+	GOTO 3220
+
+3214	'---- only OMEGA ET present
+
+	IF ET.STATUS=&H00 THEN MESSAGE$=M4$
+	IF ET.STATUS=&H04 THEN MESSAGE$=M5$
+
+	IF ET.STATUS=&H04 THEN SCREEN ,,1,1	'man phasers scn
+	IF ET.STATUS=&H0C THEN GOTO 3300	'>>>>>>>>>>
+
+	GOSUB 6000
+	MONO.WB$=MESSAGE$:GOSUB 7000
+
+	GOTO 3220
+
+
+3220	'	READ ALPHA DATA BLOCK
+	'	----------------------
+
+     IF ALPHA.TERMINAL = 0 THEN 3230
+
+     DATA.OUT = STATUS.COMMAND
+     ET.NUMBER = ALPHA
+     JOB = OUTPUT.BYTE
+     GOSUB 14000
+
+     JOB = INPUT.BYTE
+     GOSUB 14000
+     IF DATA.IN <> READY.TO.TRANSFER THEN 3230
+
+
+        MESSAGE$ = "READING ALPHA CODES "
+	GOSUB 6000
+	MONO.WB$=MESSAGE$:GOSUB 7000
+
+     DATA.OUT = TRANSFER
+     JOB = OUTPUT.BYTE
+     GOSUB 14000
+
+     JOB = INPUT.BLOCK 
+     GOSUB 14000  
+     IF DATA.OUT = NAK THEN 3210	'>>>>>>>>>>>>>>>>>>
+
+	'---- massage data block
+
+     ALPHA.GAME.TYPE = GAME.TYPE
+     ALPHA.RED.TEAM.NAME$ = RED.TEAM.NAME$
+     ALPHA.GREEN.TEAM.NAME$ = GREEN.TEAM.NAME$
+          FOR X=1 TO 20
+               ALPHA.RED.ID$(X) = LEFT$(RED.PLAYER$(X),10)
+               ALPHA.RED.NAME$(X) = RIGHT$(RED.PLAYER$(X),10)
+               ALPHA.GREEN.ID$(X) = LEFT$(GREEN.PLAYER$(X),10)
+               ALPHA.GREEN.NAME$(X) = RIGHT$(GREEN.PLAYER$(X),10)
+          NEXT X
+
+          FOR X=1 TO 10
+               IF ALPHA.RED.ID$(X) = "          " THEN 3222
+               PLAYING(2*X+1) = 1
+3222
+               IF ALPHA.GREEN.ID$(X) = "          " THEN 3224
+               PLAYING(2*X+21) = 1
+3224
+          NEXT X
+
+	ET.STATUS=ET.STATUS OR &H01	'ALPHA block transfer done
+
+
+3230	'	READ OMEGA DATA BLOCK
+	'	---------------------
+
+     IF OMEGA.TERMINAL = 0 THEN 3240
+
+     DATA.OUT = STATUS.COMMAND
+     ET.NUMBER = OMEGA
+     JOB = OUTPUT.BYTE
+     GOSUB 14000
+
+     JOB = INPUT.BYTE
+     GOSUB 14000
+     IF DATA.IN <> READY.TO.TRANSFER THEN 3240
+
+	MESSAGE$ = "READING OMEGA CODES "
+	GOSUB 6000
+	MONO.WB$=MESSAGE$:GOSUB 7000
+
+     DATA.OUT = TRANSFER
+     JOB = OUTPUT.BYTE
+     GOSUB 14000 
+
+     JOB = INPUT.BLOCK
+     GOSUB 14000
+     IF DATA.OUT = NAK THEN 3210	'>>>>>>>>>>>>>>>>>>
+
+	'---- massage data block
+
+     OMEGA.GAME.TYPE = GAME.TYPE
+     OMEGA.RED.TEAM.NAME$ = RED.TEAM.NAME$
+     OMEGA.GREEN.TEAM.NAME$ = GREEN.TEAM.NAME$
+          FOR X=1 TO 20
+               OMEGA.RED.ID$(X) = LEFT$(RED.PLAYER$(X),10)
+               OMEGA.RED.NAME$(X) = RIGHT$(RED.PLAYER$(X),10)
+               OMEGA.GREEN.ID$(X) = LEFT$(GREEN.PLAYER$(X),10)	
+               OMEGA.GREEN.NAME$(X) = RIGHT$(GREEN.PLAYER$(X),10)
+          NEXT X
+
+          FOR X=1 TO 10
+               IF OMEGA.RED.ID$(X) = "          " THEN 3232
+               PLAYING(2*X+2) = 1
+3232
+               IF OMEGA.GREEN.ID$(X) = "          " THEN 3234
+               PLAYING(2*X+22) = 1
+3234
+          NEXT X
+
+	ET.STATUS=ET.STATUS OR &H04
+
+
+3240	'	CK FOR ACTIVE ETs READY TO START
+	'	--------------------------------
+
+	IF ALPHA.TERMINAL = 0 THEN 3242
+
+	ET.NUMBER = ALPHA
+	DATA.OUT = STATUS.COMMAND
+	JOB = OUTPUT.BYTE
+	GOSUB 14000
+
+	JOB = INPUT.BYTE
+	GOSUB 14000
+	IF DATA.IN = READY.TO.START THEN ET.STATUS = ET.STATUS OR &H02
+
+3242
+	IF OMEGA.TERMINAL = 0 THEN 3210	'>>>>>>>>>>>>>>>>>>
+
+	ET.NUMBER = OMEGA
+	DATA.OUT = STATUS.COMMAND
+	JOB = OUTPUT.BYTE
+	GOSUB 14000
+
+	JOB = INPUT.BYTE
+	GOSUB 14000
+	IF DATA.IN = READY.TO.START THEN ET.STATUS = ET.STATUS OR &H08
+
+	GOTO 3210	'>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+
+
+3300	'------------------------------------------------
+	'	    START EFFECTS COMPUTER
+	'------------------------------------------------
+
+	GOSUB 11100	' send CR
+
+	GOSUB 7150:GOSUB 7150
+	MONO.WB$="SENT START TO EFFECTS COMPUTER":GOSUB 7000
+
+	GOSUB 10000	'set TIME.REF for DWN.CNT 
+	DWN.CNT = 28
+
+	SCREEN ,,2,2	'flashing ALERT
+
+	MESSAGE$ = "MANEUVER START IN ------> T - 28 SEC":GOSUB 6000
+
+
+3400	'--------------------------------------------------
+	'	SET UP GAME EVENT TIMES
+	'--------------------------------------------------
+
+	GOSUB 10000	'set TIME.REF for UP.CNT 
+	UP.CNT = 0
+
+	'	AWAIT BACKGND DOWN
+	'	------------------
+	START.LASER.CD = 7
+
+
+	'	AWAIT CD INTRO MESSAGE DONE
+	'	---------------------------
+	GAME.START = + 28		' 10 secs +
+					' 18 secs	
+
+	'	AWAIT GAME DONE
+	'	---------------
+	GAME.OVER.TIME = 388		' 10 secs +
+					' 18 SECONDS AT FRONT OF GAME +
+					' 360 SECOND GAME
+
+	'	AWAIT CD EXIT MESSAGE
+	'	---------------------
+	CD.OFF.TIME = 405		' 10 secs +
+					' 18 SECONDS AT FRONT OF GAME +
+					' 360 SECONDS GAME TIME +
+					' 17 SECONDS AT END OF GAME
+
+3450	'------------------------------------------------
+	'	START TO CD & LASER COMPUTER
+	'------------------------------------------------
+
+	GOSUB 10000
+
+	LOCATE 25,33
+	GOSUB 6400: PRINT USING "##";DWN.CNT;
+
+	IF UP.CNT < START.LASER.CD THEN 3450
+
+
+	A=PAUSE: GOSUB 13000		'start CD
+
+	GOSUB 12100	' send TAB. start LASER COMPUTER
+
+	MONO.WB$= "SENT START TO CD & LASER COMPUTER":GOSUB 7000
+
+
+
+3600	'--------------------------------------------------
+	'   WAIT FOR GAME START TIME THEN GSYNC TO SLAVE
+	'--------------------------------------------------
+
+3610	GOSUB 10000	'get time
+
+	LOCATE 25,33
+	GOSUB 6400: PRINT USING "##";DWN.CNT;
+
+	IF UP.CNT < GAME.START THEN 3610	
+
+	'	SET TIME.REF FOR GAME DWN.CNT
+	'	-----------------------------
+	GOSUB 10000
+	DWN.CNT = 360
+
+	'	GSYNC to SLAVE
+	'	--------------
+
+	MONO.WB$="AWAITING SLAVE GSYNC ACKN":GOSUB 7000
+
+
+	DEF SEG=&H2000
+	POKE TASK,GSYNC
+
+3620	IF PEEK(STATUS)<>GSYNC THEN 3620	'wait SLAVE ackn
+	DEF SEG
+
+	MONO.WB$= "SLAVE ACKNOWLEDGE RECEIVED":GOSUB 7000
+
+
+3700	'--------------------------------------------------
+	'	ACKNOWLEDGE ET(s) START REQUEST
+	'--------------------------------------------------
+
+	IF ALPHA.TERMINAL = 0 THEN 3704
+
+	ET.NUMBER = ALPHA
+	DATA.OUT = START
+	JOB = OUTPUT.BYTE
+	GOSUB 14000
+
+	MONO.WB$ = "AWAITING ALPHA ACKN ":GOSUB 7000
+
+3702
+	JOB = INPUT.BYTE
+	GOSUB 14000
+	IF DATA.IN <> START THEN 3702
+
+3704
+	IF OMEGA.TERMINAL = 0 THEN 3800
+
+	ET.NUMBER = OMEGA
+	DATA.OUT = START
+	JOB = OUTPUT.BYTE
+	GOSUB 14000
+
+	MONO.WB$ = "AWAITING OMEGA ACKN ":GOSUB 7000
+
+3706
+	JOB = INPUT.BYTE
+	GOSUB 14000
+	IF DATA.IN <> START THEN 3706
+
+
+3800	'--------------------------------------------------
+	'		MAIN GAME LOOP
+	'--------------------------------------------------
+
+	'	INIT SCORE SCREEN 
+	'	-----------------
+
+	GOSUB 7150
+	MONO.WB$= "------ GAME STARTED -------":GOSUB 7000
+	GOSUB 7150
+
+
+	GOSUB 20600		'display score scrn
+
+
+
+	MESSAGE$ = "MANEUVER     TIME REMAINING      SEC": GOSUB 6000
+	LOCATE 25,12: PRINT USING "##";GAME.NUMBER;
+
+
+3810	'	DISPLAY GAME TIME REMAINING
+	'	---------------------------
+	GOSUB 10000: GOSUB 6400: LOCATE 25,32: PRINT USING "###";DWN.CNT;
+
+	'	GAME IN PROGRESS TO PHASOR STATION
+	'	----------------------------------
+	A=GSYNC: GOSUB 16000
+	MONO.WB$="GAME IN PROGRESS TO PHASOR STATIONS":GOSUB 7000
+
+	'	IF GAME OVER THEN EXIT MAIN GAME LOOP
+	'	-------------------------------------
+3820	GOSUB 10000               ' GET CURRENT TIME
+
+        IF UP.CNT => GAME.OVER.TIME THEN 3830  '>>>>>>>>>>>>>>>>
+
+
+    	'	CALCULATE, SORT & DISPLAY SCORES
+	'	--------------------------------
+
+	GOSUB 9000                ' CALCULATE SCORES
+
+	GOSUB 5000                ' SORT PLAYERS ACCORDING TO SCORES
+	GOSUB 8000                ' DISPLAY PLAYERS AND SCORES
+
+
+	GOTO 3810                 ' REPEAT UNTIL GAME.END.TIME
+
+
+
+3830	'--------------------------------------------------
+	'		ESYNC TO SLAVE
+	'--------------------------------------------------
+
+	MESSAGE$ = "MANEUVER       <<  TERMINATED  >>  ":GOSUB 6000
+	LOCATE 25,12: PRINT USING "##";GAME.NUMBER;
+
+	GOSUB 7150
+	MONO.WB$="----- GAME OVER ------":GOSUB 7000
+	GOSUB 7150
+
+	MONO.WB$="AWAITING SLAVE ESYNC ACKN":GOSUB 7000
+
+	DEF SEG=&H2000
+	POKE TASK,ESYNC
+3832
+	A = PEEK(STATUS)
+	IF A<>ESYNC THEN 3832      ' WAIT FOR SLAVE ACKN
+	DEF SEG
+     
+	MONO.WB$= "SLAVE ACKNOWLEDGE RECEIVED": GOSUB 7000
+
+3840	'--------------------------------------------------
+	'	CALCULATE,SORT & DISPLAY FINAL SCORES
+	'--------------------------------------------------
+	GOSUB 9000                ' CALCULATE SCORES
+	GOSUB 5000                ' SORT PLAYERS ACCORDING TO SCORES
+	GOSUB 8000                ' DISPLAY PLAYERS AND SCORES
+
+
+
+3850	'--------------------------------------------------
+	'	WAIT FOR CD OFF TIME THEN PAUSE CD
+	'--------------------------------------------------
+
+	GOSUB 10000
+	IF UP.CNT < CD.OFF.TIME THEN 3850
+
+	A = PAUSE
+	GOSUB 13000
+
+	MONO.WB$="CD SET TO PAUSE":GOSUB 7000
+
+3860	'--------------------------------------------------
+	'	STOP ESYNC VIA RESET SLAVE 
+	'--------------------------------------------------
+
+	MONO.WB$ = "AWAITING SLAVE RESET ACKN":GOSUB 7000
+
+	DEF SEG=&H2000
+	POKE TASK,RECET
+
+3862	IF PEEK(STATUS)<>RECET THEN 3862	'wait SLAVE ackn
+	DEF SEG
+
+
+	'----------------------------------------------------
+	'	GAME DATA TO DATA COMPUTER
+	'----------------------------------------------------
+
+	MESSAGE$ = "TRANSMITTING RESULTS TO PLANET EARTH": GOSUB 6000
+
+	MONO.WB$="SENDING GAME DATA TO DATA COMPUTER":GOSUB 7000
+
+	GOSUB 4000
+	IF DATA.IN=TIMEOUT THEN MONO.REV$="  DATA COMPUTER ABSENT  ":GOSUB 7000
+
+	MESSAGE$ = "MANEUVER         STRATEGIC SUMMARY  ": GOSUB 6000
+	LOCATE 25,12: PRINT USING "##";GAME.NUMBER;
+
+
+	'--------------------------------------------------
+	'	REAL TIME GAME DATA TO DRIVE B
+	'--------------------------------------------------
+
+	MONO.WB$="SAVING GAME DATA TO DRIVE B":GOSUB 7000
+
+
+     MONTH$ = LEFT$(DATE$,2)
+     DAY$   = MID$(DATE$,4,2)
+
+     IF GAME.NUMBER<10 THEN X=1
+     IF GAME.NUMBER=>10 AND GAME.NUMBER<100 THEN X=2
+     IF GAME.NUMBER=>100 THEN X=3
+     GAME.NUMBER$ = RIGHT$(STR$(GAME.NUMBER),X)
+
+     FILENAME$="B:GD"+MONTH$+DAY$+GAME.NUMBER$+".DAT"
+
+     DEF SEG=&H2000
+     RECORDS.TO.SAVE=PEEK(NEXT.REC.NUMBER)+PEEK(NEXT.REC.NUMBER+1)*256 
+     BYTES = RECORDS.TO.SAVE*BYTES.PER.RECORD
+     OFFSET = &H200
+
+     BSAVE FILENAME$,OFFSET,BYTES
+
+
+	GOTO 3000	'>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+
+

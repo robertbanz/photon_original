@@ -1,0 +1,69 @@
+
+
+
+
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'XXXX						XXXX
+	'XXXX	    PRINT MESSAGE$ ON STATUS LINE	XXXX
+	'XXXX						XXXX
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'01-28-86 DSe
+
+	'DESCRIPTION:
+	'	checks status line backgnd color then selects
+	'	suitable foreground color for message
+	'	clears message line
+	'	truncates message to 38 chars
+	'	centers message
+	'	prints message
+
+
+6000	'if same message, return
+
+	IF MESSAGE$ = OLD.MESSAGE$ THEN RETURN	'>>>>>>>>>>>>
+
+	'get message line bckgnd color & select foregnd color
+	
+	SC=INT(SCREEN(25,1,1)/16)
+
+	IF SC=WHITE THEN FC=BLUE
+	IF SC=BLACK THEN FC=LTBLUE
+	IF SC=BLUE THEN FC=WHITE
+
+	'clear message line
+
+	COLOR FC,SC
+	LOCATE 25,1
+		FOR X = 1 TO 39
+			PRINT " ";
+		NEXT X
+
+	'truncate MESSAGE$ to 38 chars, center & print
+
+	MESSAGE$=LEFT$(MESSAGE$,38)
+	LOCATE 25,INT((40-LEN(MESSAGE$))/2)+1
+	PRINT MESSAGE$;
+	OLD.MESSAGE$=MESSAGE$
+
+	RETURN
+
+
+
+	'---------------------------------------------------
+	'		SET TIME COUNT COLORS
+	'----------------------------------------------------
+
+6400	'get message line bckgnd color & select foregnd color
+	
+	SC=INT(SCREEN(25,1,1)/16)
+
+	IF SC=WHITE THEN FC=BLACK
+	IF SC=BLACK THEN FC=WHITE
+	IF SC=BLUE THEN FC=WHITE
+
+	COLOR FC,SC
+
+	RETURN
+
+
+

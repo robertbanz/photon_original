@@ -1,0 +1,206 @@
+
+5000 ' ROUTINE TO SORT PLAYERS ACCORDING TO SCORES
+
+     IF GAME.MODE = 2 THEN 5010
+     IF ALPHA.TERMINAL = 0 THEN 5005
+          FOR X=1 TO 20
+               ALPHA.RED.SCORE(X)=SCORE(X+2)
+               ALPHA.GREEN.SCORE(X)=SCORE(X+22)
+          NEXT X
+5005
+          FOR X=1 TO 20
+               OMEGA.RED.SCORE(X) = SCORE(X+2)
+               OMEGA.GREEN.SCORE(X) = SCORE(X+22)
+          NEXT X
+5010
+          Y = 1
+          FOR X=3 TO 21 STEP 2
+               ALPHA.RED.SCORE(Y)=SCORE(X)
+               OMEGA.RED.SCORE(Y)=SCORE(X+1)
+
+               Y = Y+1
+          NEXT X
+          Y = 1
+          FOR X=23 TO 41 STEP 2
+               ALPHA.GREEN.SCORE(Y)=SCORE(X)
+               OMEGA.GREEN.SCORE(Y)=SCORE(X+1)
+
+               Y = Y+1
+          NEXT X
+     IF GAME.MODE = 2 THEN 5500
+
+5100 ' ONE TERMINAL IN OPERATION 20 PLAYERS PER TEAM
+
+     IF ALPHA.TERMINAL = 0 THEN 5300
+
+ '--- OPERATING WITH ALPHA TERMINAL---
+ '
+ '  ---------------------------------------------
+ ' |           SORT RED PLAYERS                  |
+ '  ---------------------------------------------  
+
+     ALPHA.RED.TOTAL=0
+     ALPHA.GREEN.TOTAL=0 
+     TEAM.SIZE = 20
+          FOR Y=1 TO TEAM.SIZE
+               C=Y
+               A=ALPHA.RED.SCORE(Y)
+                    FOR X=1 TO TEAM.SIZE
+                         IF A<ALPHA.RED.SCORE(X) THEN A=ALPHA.RED.SCORE(X):C=X
+                    NEXT X
+               SORTED.ALPHA.RED.SCORE(Y)=ALPHA.RED.SCORE(C)
+               SORTED.ALPHA.RED.NAME$(Y)=ALPHA.RED.NAME$(C)
+               SORTED.ALPHA.RED.ID$(Y) = ALPHA.RED.ID$(C)
+               IF SORTED.ALPHA.RED.ID$ (Y)= "          " THEN 5110
+               ALPHA.RED.TOTAL=ALPHA.RED.TOTAL+SORTED.ALPHA.RED.SCORE(Y)
+5110
+               ALPHA.RED.SCORE(C)=-10000
+          NEXT Y
+
+ '  ---------------------------------------------
+ ' |           SORT GREEN PLAYERS                |
+ '  ---------------------------------------------  
+ 
+          FOR Y=1 TO TEAM.SIZE
+               C=Y
+               A=ALPHA.GREEN.SCORE(Y)
+                    FOR X=1 TO TEAM.SIZE
+                         IF A<ALPHA.GREEN.SCORE(X) THEN A=ALPHA.GREEN.SCORE(X):C=X
+                    NEXT X
+               SORTED.ALPHA.GREEN.SCORE(Y)=ALPHA.GREEN.SCORE(C)
+               SORTED.ALPHA.GREEN.NAME$(Y)=ALPHA.GREEN.NAME$(C)
+               SORTED.ALPHA.GREEN.ID$(Y) = ALPHA.GREEN.ID$(C)
+               IF SORTED.ALPHA.GREEN.ID$(Y)="          " THEN 5120
+               ALPHA.GREEN.TOTAL=ALPHA.GREEN.TOTAL+SORTED.ALPHA.GREEN.SCORE(Y)
+5120
+               ALPHA.GREEN.SCORE(C)=-10000
+          NEXT Y
+     RETURN
+
+5300
+
+     '--- OPERATING WITH OMEGA TERMINAL---
+     '
+     '  ---------------------------------------------
+     ' |           SORT RED PLAYERS                  |
+     '  ---------------------------------------------  
+
+     OMEGA.RED.TOTAL=0
+     OMEGA.GREEN.TOTAL=0 
+     TEAM.SIZE = 20
+          FOR Y=1 TO TEAM.SIZE
+               C=Y
+               A=OMEGA.RED.SCORE(Y)
+                    FOR X=1 TO TEAM.SIZE
+                         IF A<OMEGA.RED.SCORE(X) THEN A=OMEGA.RED.SCORE(X):C=X
+                    NEXT X
+               SORTED.OMEGA.RED.SCORE(Y)=OMEGA.RED.SCORE(C)
+               SORTED.OMEGA.RED.NAME$(Y)=OMEGA.RED.NAME$(C)
+               SORTED.OMEGA.RED.ID$(Y) = OMEGA.RED.ID$(C)
+               IF SORTED.OMEGA.RED.ID$ (Y)= "          " THEN 5310
+               OMEGA.RED.TOTAL=OMEGA.RED.TOTAL+SORTED.OMEGA.RED.SCORE(Y)
+5310
+               OMEGA.RED.SCORE(C)=-10000
+          NEXT Y
+
+ '  ---------------------------------------------
+ ' |           SORT GREEN PLAYERS                |
+ '  ---------------------------------------------  
+ 
+          FOR Y=1 TO TEAM.SIZE
+               C=Y
+               A=OMEGA.GREEN.SCORE(Y)
+                    FOR X=1 TO TEAM.SIZE
+                         IF A<OMEGA.GREEN.SCORE(X) THEN A=OMEGA.GREEN.SCORE(X):C=X
+                    NEXT X
+               SORTED.OMEGA.GREEN.SCORE(Y)=OMEGA.GREEN.SCORE(C)
+               SORTED.OMEGA.GREEN.NAME$(Y)=OMEGA.GREEN.NAME$(C)
+               SORTED.OMEGA.GREEN.ID$(Y) = OMEGA.GREEN.ID$(C)
+               IF SORTED.OMEGA.GREEN.ID$(Y)="          " THEN 5320
+               OMEGA.GREEN.TOTAL=OMEGA.GREEN.TOTAL+SORTED.OMEGA.GREEN.SCORE(Y)
+5320
+               OMEGA.GREEN.SCORE(C)=-10000
+          NEXT Y
+     RETURN
+
+
+5500 ' TWO TERMINALS IN OPERATION 10 PLAYERS PER TEAM
+
+
+ '  ---------------------------------------------
+ ' |           SORT RED ALPHA PLAYERS            |
+ '  ---------------------------------------------  
+     ALPHA.RED.TOTAL=0
+     ALPHA.GREEN.TOTAL=0
+     OMEGA.RED.TOTAL=0
+     OMEGA.GREEN.TOTAL=0
+ 
+     TEAM.SIZE = 10
+          FOR Y=1 TO TEAM.SIZE
+               C=Y
+               A=ALPHA.RED.SCORE(Y)
+                    FOR X=1 TO TEAM.SIZE
+                         IF A<ALPHA.RED.SCORE(X) THEN A=ALPHA.RED.SCORE(X):C=X
+                    NEXT X
+               SORTED.ALPHA.RED.SCORE(Y)=ALPHA.RED.SCORE(C)
+               SORTED.ALPHA.RED.NAME$(Y)=ALPHA.RED.NAME$(C)
+               SORTED.ALPHA.RED.ID$(Y) = ALPHA.RED.ID$(C)
+               IF SORTED.ALPHA.RED.ID$(Y)="          " THEN 5550
+               ALPHA.RED.TOTAL=ALPHA.RED.TOTAL+SORTED.ALPHA.RED.SCORE(Y)
+5550           ALPHA.RED.SCORE(C)=-10000
+          NEXT Y
+
+ '  ---------------------------------------------
+ ' |         SORT GREEN ALPHA PLAYERS            |
+ '  ---------------------------------------------  
+ 
+          FOR Y=1 TO TEAM.SIZE
+               C=Y
+               A=ALPHA.GREEN.SCORE(Y)
+                    FOR X=1 TO TEAM.SIZE
+                         IF A<ALPHA.GREEN.SCORE(X) THEN A=ALPHA.GREEN.SCORE(X):C=X
+                    NEXT X
+               SORTED.ALPHA.GREEN.SCORE(Y)=ALPHA.GREEN.SCORE(C)
+               SORTED.ALPHA.GREEN.NAME$(Y)=ALPHA.GREEN.NAME$(C)
+               SORTED.ALPHA.GREEN.ID$(Y) = ALPHA.GREEN.ID$(C)
+               IF SORTED.ALPHA.GREEN.ID$(Y)="          " THEN 5600
+               ALPHA.GREEN.TOTAL=ALPHA.GREEN.TOTAL+SORTED.ALPHA.GREEN.SCORE(Y)
+5600           ALPHA.GREEN.SCORE(C)=-10000
+          NEXT Y
+
+ '  ---------------------------------------------
+ ' |         SORT RED OMEGA PLAYERS              |
+ '  ---------------------------------------------  
+ 
+          FOR Y=1 TO TEAM.SIZE
+               C=Y
+               A=OMEGA.RED.SCORE(Y)
+                    FOR X=1 TO TEAM.SIZE
+                         IF A<OMEGA.RED.SCORE(X) THEN A=OMEGA.RED.SCORE(X):C=X
+                    NEXT X
+               SORTED.OMEGA.RED.SCORE(Y)=OMEGA.RED.SCORE(C)
+               SORTED.OMEGA.RED.NAME$(Y)=OMEGA.RED.NAME$(C)
+               SORTED.OMEGA.RED.ID$(Y) = OMEGA.RED.ID$(C)
+               IF SORTED.OMEGA.RED.ID$(Y)="          " THEN 5650
+               OMEGA.RED.TOTAL=OMEGA.RED.TOTAL+SORTED.OMEGA.RED.SCORE(Y)
+5650           OMEGA.RED.SCORE(C)=-10000
+          NEXT Y
+
+ '  ---------------------------------------------
+ ' |         SORT GREEN OMEGA PLAYERS            |
+ '  ---------------------------------------------  
+ 
+          FOR Y=1 TO TEAM.SIZE
+               C=Y
+               A=OMEGA.GREEN.SCORE(Y)
+                    FOR X=1 TO TEAM.SIZE
+                         IF A<OMEGA.GREEN.SCORE(X) THEN A=OMEGA.GREEN.SCORE(X):C=X
+                    NEXT X
+               SORTED.OMEGA.GREEN.SCORE(Y)=OMEGA.GREEN.SCORE(C)
+               SORTED.OMEGA.GREEN.NAME$(Y)=OMEGA.GREEN.NAME$(C)
+               SORTED.OMEGA.GREEN.ID$(Y) = OMEGA.GREEN.ID$(C)
+               IF SORTED.OMEGA.GREEN.ID$(Y)="          " THEN 5700
+               OMEGA.GREEN.TOTAL=OMEGA.GREEN.TOTAL+SORTED.OMEGA.GREEN.SCORE(Y)
+5700           OMEGA.GREEN.SCORE(C)=-10000
+          NEXT Y
+     RETURN 

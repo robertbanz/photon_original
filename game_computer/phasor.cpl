@@ -1,0 +1,39 @@
+
+
+
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'XXXX					XXXX
+	'XXXX	   PHASOR STATION HANDLER	XXXX
+	'XXXX					XXXX
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+	' send A contents to PHASOR STATION 3 times	
+
+
+16000	'TASK SUB
+	'-------------------------------------------
+	'SEND A CONTENTS TO PHASOR STATION 3 TIMES	
+	'-------------------------------------------
+
+	GOSUB 16200
+	GOSUB 16200
+	GOSUB 16200
+
+	RETURN
+
+
+
+16200	'SUPPORT SUB
+	'------------------------------------------
+	'	TXMT SHIFT REG EMPTY, OUT DATA
+	'------------------------------------------
+
+16210	XS=INP(H3STAT) AND &H40
+	IF XS=0 THEN 16210
+
+
+16300	OUT H3DATA,A
+	RETURN
+
+
+

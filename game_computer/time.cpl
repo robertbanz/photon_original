@@ -1,0 +1,57 @@
+
+
+
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'XXXX						XXXX
+	'XXXX		UP/DOWN SECOND COUNT		XXXX
+	'XXXX						XXXX
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'01-28-86 DSe
+
+	'protocol:
+	
+	'	---- init for up and/or down count
+	'	CALL 10000	to set TIME.REF
+	'	UP.CNT = n	set starting up count value
+	'	DWN.CNT = n	set starting down count value
+	'		.....
+	'	CALL 10000
+	'		UP.CNT = UP.CNT init value + time since init
+	'		DWN.CNT= DWN.CNT init value - time since init
+
+
+
+10000
+	'	get system clock mins, secs to secs
+	TIME.CNT$ = TIME$
+	TIME = VAL(MID$(TIME.CNT$,4,2))*60 + VAL(RIGHT$(TIME.CNT$,2))
+
+	'	range to prevent math error
+	IF TIME.REF > 3600 OR TIME.REF < 0 THEN GOTO 10020   '>>>>>>>>
+
+	'	set new ref if clock rolled over
+	IF TIME < TIME.REF THEN TIME.REF=TIME.REF - 3600
+
+	'	COUNT UP IN SECS
+	'	----------------
+	'	range to prevent math error
+	IF UP.CNT > 3600 OR UP.CNT < 0 THEN 10010
+
+	UP.CNT = UP.CNT + (TIME - TIME.REF)
+
+10010	'	COUNT DOWN IN SECS
+	'	------------------
+	'	range to prevent math error
+	IF DWN.CNT > 3600 OR DWN.CNT <= 0 THEN 10020
+
+	DWN.CNT = DWN.CNT - (TIME - TIME.REF)
+
+	'	if counted down, keep at 0 
+	IF DWN.CNT <= 0	 THEN DWN.CNT = 0
+
+10020	'	SET NEW REF
+	'	-----------	
+	TIME.REF = TIME
+
+	RETURN
+

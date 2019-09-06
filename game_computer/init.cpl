@@ -1,0 +1,321 @@
+
+
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'XXXX						XXXX
+	'XXXX	       SYSTEM INITIALIZATION		XXXX
+	'XXXX						XXXX
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'01-18-86 DSe		LASTEST REV 05-30-86 DSe	
+
+
+
+1000
+        ON ERROR GOTO 15000
+
+	'--------------------------------------------------
+	'	COLD START SCREEN
+	'--------------------------------------------------
+	COLOR 0,7,0:CLS
+
+	COLOR 7,0:LN=5:CL=18
+	LOCATE LN,CL
+	PRINT "                                        "
+	LOCATE LN+1,CL
+	PRINT "         PHOTON SYSTEM COMPUTER         "
+	LOCATE LN+2,CL
+	PRINT "                                        "
+  
+
+1100	'--------------------------------------------------
+	'		INIT SLAVE
+	'--------------------------------------------------
+
+	COLOR 7,0,0:LOCATE 12,9
+	PRINT "   SENT RESET TO SLAVE    AWAITING ACKN       "
+
+	OUT WRITE.SLAVE,RECET
+
+1112	ST=INP(SLAVE.STATUS) AND &H4
+	IF ST<>0 THEN 1112
+	DAT=INP(READ.SLAVE)
+	IF DAT<>RECET THEN 1112
+
+	COLOR 7,0,0:LOCATE 12,9
+	PRINT "   SLAVE READY                                "
+
+	'--------------------------------------------------
+	'	LOAD GP/SLAVE I/O PROGRAM TO RAM
+	'--------------------------------------------------
+
+	LOCATE 14,9:COLOR 7,0,0
+	PRINT "   LOADING GP/SLAVE I/O PROGRAM INTO MEMORY   "
+
+	GOSUB 2000               ' LOAD MACHINE LANGUAGE PROGRAMS
+	NEWVECTOR% = &H80
+	DEF SEG = &H2000
+	CALL ABSOLUTE (NEWVECTOR%)
+
+	DEF SEG
+
+	'---------------------------------------------------
+	'	      INIT SERIAL PORTS
+	'---------------------------------------------------
+
+	LOCATE 16,9
+	PRINT "   INITIALIZING HOSTESS I/O PORTS             "
+
+          ' CHANNEL ONE
+     OUT H1LINE,131
+     OUT H1DATA,12
+     OUT H1MODE,3
+     OUT H1INTE,0
+     OUT H1LINE,3
+
+          ' CHANNEL TWO
+     OUT H2LINE,131
+     OUT H2DATA,12
+     OUT H2MODE,3
+     OUT H2INTE,0
+     OUT H2LINE,3
+     
+          ' CHANNEL THREE
+     OUT H3LINE,131
+     OUT H3DATA,12
+     OUT H3MODE,3
+     OUT H3INTE,0
+     OUT H3LINE,3
+
+          ' CHANNEL FOUR
+     OUT H4LINE,131
+     OUT H4DATA,12
+     OUT H4MODE,3
+     OUT H4INTE,0
+     OUT H4LINE,3
+     
+          ' CHANNEL FIVE
+     OUT H5LINE,131
+     OUT H5DATA,12
+     OUT H5MODE,3
+     OUT H5INTE,0
+     OUT H5LINE,3
+
+          ' CHANNEL SIX
+     OUT H6LINE,131
+     OUT H6DATA,12
+     OUT H6MODE,3
+     OUT H6INTE,0
+     OUT H6LINE,3
+     
+          ' CHANNEL SEVEN
+     OUT H7LINE,131
+     OUT H7DATA,12
+     OUT H7MODE,3
+     OUT H7INTE,0
+     OUT H7LINE,3
+
+          ' CHANNEL EIGHT
+     OUT C2LINE,131
+     OUT C2DATA,12
+     OUT C2MODE,3
+     OUT C2INTE,0
+     OUT C2LINE,3
+
+
+	'------- ASSIGN TRACK SEQUENCE --------
+
+	SEQ.NO=1
+
+	'***** set array length and define array *****
+
+	SEQ.LNG =18
+
+	DIM CD.SEQ(18)
+	DIM EFFECTS.LASER.SEQ(18)
+
+	'fill arrays
+
+	CD.SEQ(1)=1: CD.SEQ(2)=2: CD.SEQ(3)=3: CD.SEQ(4)=4: CD.SEQ(5)=5
+	CD.SEQ(6)=6: CD.SEQ(7)=1: CD.SEQ(8)=2: CD.SEQ(9)=3: CD.SEQ(10)=4
+	CD.SEQ(11)=5: CD.SEQ(12)=7: CD.SEQ(13)=1: CD.SEQ(14)=2: CD.SEQ(15)=3
+	CD.SEQ(16)=4: CD.SEQ(17)=5: CD.SEQ(18)=8
+
+  EFFECTS.LASER.SEQ(1)=3: EFFECTS.LASER.SEQ(2)=5: EFFECTS.LASER.SEQ(3)=4
+  EFFECTS.LASER.SEQ(4)=7: EFFECTS.LASER.SEQ(5)=6: EFFECTS.LASER.SEQ(6)=1
+  EFFECTS.LASER.SEQ(7)=3: EFFECTS.LASER.SEQ(8)=5: EFFECTS.LASER.SEQ(9)=4
+  EFFECTS.LASER.SEQ(10)=7: EFFECTS.LASER.SEQ(11)=6: EFFECTS.LASER.SEQ(12)=2
+  EFFECTS.LASER.SEQ(13)=3: EFFECTS.LASER.SEQ(14)=5: EFFECTS.LASER.SEQ(15)=4
+  EFFECTS.LASER.SEQ(16)=7: EFFECTS.LASER.SEQ(17)=6: EFFECTS.LASER.SEQ(18)=8
+
+
+
+	'	STOP CD & PLACE IN PAUSE
+	'	------------------------
+
+	OUT &H203,&H80		'??? unknown function
+
+	A=STOP.CD:GOSUB 13000
+	A=PAUSE: GOSUB 13000
+
+
+
+	'--------------------------------------------------
+	'		INIT DISPLAYS
+	'--------------------------------------------------
+ 
+	'	INIT MONO
+	'	---------
+
+	GOSUB 7700		'init for mono display
+
+	MONO.WB$="":MONO.REV$="":MONO.STAT$=""
+
+	'	COLOR DISPLAY IS DEFAULT DISPLAY. INIT
+	'	--------------------------------------
+
+	GOSUB 7600		'init for color display
+
+
+	'--------------------------------------------------
+	'	COLOR DISPLAY SIGN ON MESSAGE
+	'--------------------------------------------------
+	GOSUB 20000
+
+
+	MONO.REV$= "      COLD START INITIALIZATION      ":GOSUB 7000
+	GOSUB 7150
+
+	'---- PHASORS INSTALLED
+
+1210	BEEP
+	MONO.STAT$= "PHASOR STATIONS INSTALLED (Y/N)?":GOSUB 7000
+1212	A$="":A$=INKEY$:IF A$="" THEN 1212
+	GOSUB 7100
+	IF A$="Y" OR A$="y" THEN PHASORS.INSTALLED = 1 :GOTO 1220
+	IF A$="N" OR A$="n" THEN PHASORS.INSTALLED = 0 :GOTO 1220
+	GOTO 1210
+
+1220	'--------------------------------------------------
+	'	INIT EFFECTS COMPUTER
+	'--------------------------------------------------
+
+	GOSUB 7150
+1221	MONO.WB$= "RESET SENT TO EFFECTS COMPUTER":GOSUB 7000
+	GOSUB 11500
+
+	BEEP
+	MONO.STAT$= "EFFECTS = RU50 IDLE SCENE (Y/N)?":GOSUB 7000
+1222	A$="":A$=INKEY$:IF A$="" THEN 1222
+	GOSUB 7100
+	M1$="  EFFECTS COMPUTER READY  "
+	IF A$="Y" OR A$="y" THEN MONO.REV$=M1$:GOSUB 7000:GOTO 1230 '>>>>
+
+	BEEP
+	MONO.STAT$= "(R)etry (A)abort RESET EFFECTS ?":GOSUB 7000
+1224	A$="":A$=INKEY$:IF A$="" THEN 1224
+	IF A$="R" OR A$="r" THEN GOTO 1221
+	IF A$<>"A" AND A$<>"a" THEN BEEP:GOTO 1224
+	GOSUB 7100:MONO.REV$="  EFFECTS MALFUNCTION  ":GOSUB 7000
+
+1230	'------------------------------------------------------------------
+	'		COLOR DISPLAY STATUS REPORT
+	'------------------------------------------------------------------
+	GOSUB 20020
+
+1240	'--------------------------------------------------
+	'	INIT ENTRY TERMINAL(S)
+	'--------------------------------------------------
+
+	GOSUB 7150
+	ALPHA.TERMINAL = INP(ALPHA.MODEM.STATUS) AND ALPHA.PRESENT
+	OMEGA.TERMINAL = INP(OMEGA.MODEM.STATUS) AND OMEGA.PRESENT
+	IF ALPHA.TERMINAL THEN 1242
+	IF OMEGA.TERMINAL THEN 1242
+
+	BEEP:MONO.WB$="POWER UP ENTRY TERMINAL(S)   ":GOSUB 7000
+
+1242	ALPHA.TERMINAL = INP(ALPHA.MODEM.STATUS) AND ALPHA.PRESENT
+	OMEGA.TERMINAL = INP(OMEGA.MODEM.STATUS) AND OMEGA.PRESENT
+	IF ALPHA.TERMINAL=0 AND OMEGA.TERMINAL=0 THEN 1242
+
+
+	M1$="ALPHA TERMINAL - PRESENT"
+	M2$="ALPHA TERMINAL - ABSENT "
+
+	ALPHA.TERMINAL = INP(ALPHA.MODEM.STATUS) AND ALPHA.PRESENT
+	IF ALPHA.TERMINAL THEN MONO.WB$=M1$ ELSE MONO.WB$=M2$
+	GOSUB 7000
+
+	M1$="OMEGA TERMINAL - PRESENT"
+	M2$="OMEGA TERMINAL - ABSENT "
+
+	OMEGA.TERMINAL = INP(OMEGA.MODEM.STATUS) AND OMEGA.PRESENT
+	IF OMEGA.TERMINAL THEN MONO.WB$=M1$ ELSE MONO.WB$=M2$
+	GOSUB 7000
+
+	BEEP
+	MONO.STAT$= "DESIRED CONFIGURATION (Y/N)?":GOSUB 7000
+1244	A$="":A$=INKEY$:IF A$="" THEN 1244
+	IF A$ <> "Y" AND A$ <> "y" THEN 1240
+	GOSUB 7100
+
+	'	ET GAME MODE
+	'	------------
+
+	IF ALPHA.TERMINAL AND OMEGA.TERMINAL THEN GAME.MODE=2 ELSE GAME.MODE=1
+
+	GOSUB 7150
+	IF ALPHA.TERMINAL = 0 THEN 1260
+
+1250	'	RESET ALPHA TERMINAL
+	'	--------------------
+
+	MONO.WB$="RESET TO ALPHA ET    AWAITING ACKN":GOSUB 7000
+
+     ET.NUMBER = ALPHA
+     DATA.OUT = RECET
+     JOB = OUTPUT.BYTE
+     GOSUB 14000
+     JOB = INPUT.BYTE
+     GOSUB 14000
+     IF DATA.OUT <> DATA.IN THEN 1250
+     DATA.OUT = MAX.PLAYERS
+     JOB = OUTPUT.BYTE
+     GOSUB 14000
+     JOB = INPUT.BYTE 
+     GOSUB 14000
+     IF DATA.OUT <> DATA.IN THEN 1250
+
+	MONO.REV$="  ALPHA TERMINAL READY  ":GOSUB 7000
+
+     IF OMEGA.TERMINAL = 0 THEN 1280
+
+1260	'	RESET OMEGA TERMINAL
+	'	--------------------
+
+	MONO.WB$="RESET TO OMEGA ET    AWAITING ACKN":GOSUB 7000
+
+     ET.NUMBER = OMEGA
+     DATA.OUT = RECET
+     JOB = OUTPUT.BYTE
+     GOSUB 14000
+     JOB = INPUT.BYTE 
+     GOSUB 14000
+     IF DATA.OUT <> DATA.IN THEN 1260
+     DATA.OUT = MAX.PLAYERS
+     JOB = OUTPUT.BYTE
+     GOSUB 14000
+     JOB = INPUT.BYTE
+     GOSUB 14000
+     IF DATA.OUT <> DATA.IN THEN 1260
+
+	MONO.REV$="  OMEGA TERMINAL READY  ":GOSUB 7000
+
+
+1280	GOSUB 7150
+	MONO.WB$= "<<<<< SYSTEM INITIALIZATION DONE >>>>>":GOSUB 7000
+
+
+	GOTO 3000                ' PLAY GAME
+
+
+

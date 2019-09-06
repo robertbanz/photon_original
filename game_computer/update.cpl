@@ -1,0 +1,294 @@
+
+
+
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'XXXX						XXXX
+	'XXXX	    UPDATE SCORES IN SCORE ARRAY	XXXX
+	'XXXX						XXXX
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+'01-18-86 DSe
+
+'DESCRIPTION:
+
+'	Via MACHINE module, codes received from each player are
+'	placed in SLAVE file where each record is a game cycle.
+
+'	UPDATE processes these records to calculate scores in
+'	real time in the following manner:
+
+
+'	FOR PLYR = 3 TO PLAYERS 
+'	[ PLYR 1 (TEST 1) & PLYR 2 (TEST 2) are not processed ]
+
+'		start with next record to process in SLAVE file
+
+'		read the code sent by PLYR from SLAVE file record
+
+'		update PLYR's score in SCORE array and OPPONENT's
+'		(player that PLYR hit) score in SCORE array
+
+'		repeat until end of records currently in SLAVE file
+
+'	NEXT PLAYER
+
+
+'EXTERNAL INIT REQUIREMENTS:
+'	via GAME.CPL per each game
+'		PLAYING array zeroed
+'		BASE.HITS array zeroed
+'		SCORE array zeroed
+'		SLAVE file's FCB & records zeroed
+'		HIT.CNT array zerod
+
+
+9000	'--------------------------------------------------
+	'		MODULE INIT
+	'--------------------------------------------------
+
+	DEF SEG =&H2000
+
+	'get NRN (i.e. next record to be written)
+
+	NEXT.REC.NUMBER.LO=PEEK(NEXT.REC.NUMBER)
+	NEXT.REC.NUMBER.HI=PEEK(NEXT.REC.NUMBER + 1)
+
+	NRN = NEXT.REC.NUMBER.HI * 256
+	NRN = NRN + NEXT.REC.NUMBER.LO
+
+	'get record number of next record to process
+
+	NRP = PEEK(NEXT.REC.TO.PROCESS+1)*256
+	NRP = NRP + PEEK(NEXT.REC.TO.PROCESS)
+
+	'calculate address of next rec to process
+
+	STARTING.ADDRESS = &H200 + NRP * BYTES.PER.RECORD
+
+	'next record number to process to FCB
+
+	POKE NEXT.REC.TO.PROCESS,NEXT.REC.NUMBER.LO
+	POKE NEXT.REC.TO.PROCESS+1,NEXT.REC.NUMBER.HI
+
+	'exit if no new records to process
+
+	IF NRN = NRP THEN RETURN	'>>>>>>>>>>>>>>>>>>>
+
+
+	'--------------------------------------------------
+	'    UPDATE EACH PLAYER'S SCORES IN SCORE ARRAY
+	'--------------------------------------------------
+
+	FOR PLYR = 3 TO PLAYERS		'player in PLAYING array, SCORE array
+					'and SLAVE file record
+					'TEST 1 & TEST 2 not processed
+ 'check for this player in game
+
+ IF PLAYING(PLYR) = 0 THEN  9030	'player not in game
+					'get next player >>>>>>>>>>>>
+
+ 'determine this player's code & opponent base code
+
+ IF PLYR<23  THEN OPPONENT.BASE = GREEN.BASE: PLYR.CODE=PLYR+63
+ IF PLYR>22 AND PLYR<43  THEN OPPONENT.BASE = RED.BASE: PLYR.CODE=PLYR-22+127
+
+ 'determine alpha or omega player
+
+ IF (PLYR.CODE AND &H1) = 0 THEN GAME.TYPE = ALPHA.GAME.TYPE
+ IF (PLYR.CODE AND &H1) = 1 THEN GAME.TYPE = OMEGA.GAME.TYPE
+
+ 'set SA to starting addr of 1st rec to be processed
+
+ SA=STARTING.ADDRESS	'rec starting address
+
+
+	'	CALCULATE & UPDATE THIS PLAYER'S SCORE IN SCORE ARRAY
+	'	-----------------------------------------------------
+	'	beginning with last rec processed,
+	'	get code that player sent, calculate score and update
+	'	SCORE file,
+	'	repeat thru last rec currently written to file
+
+			FOR REC=NRP TO (NRN-1)
+
+ 'get code received from SLAVE file record
+
+ CODE.RCVD=PEEK(SA+PLYR-1)
+
+ 'check that code recieved is in same alpha or omega player group
+ 'and is a valid player or base code
+ 'if invalid, go get next record
+
+ IF CODE.RCVD=>66 AND CODE.RCVD<86 THEN OPPONENT=CODE.RCVD-63:GOTO 9003
+ IF CODE.RCVD=>128 AND CODE.RCVD<148 THEN OPPONENT=CODE.RCVD+22-127:GOTO 9003
+ IF CODE.RCVD=OPPONENT.BASE GOTO 9003
+ GOTO 9020				' rcvd code invalid >>>>>>>>
+
+ 9003	'calculate score & update SCORE array
+
+	ON (GAME.TYPE AND &HF) GOSUB 9400,9500,9600
+
+9020	'next record address
+
+	SA=SA + BYTES.PER.RECORD
+
+			NEXT REC
+
+9030	'next player
+
+	NEXT PLYR
+
+	RETURN			' all done. return to caller >>>>>>>>>>>
+
+
+
+9400	'TASK SUB
+	'--------------------------------------------------
+	'		PUBLIC SCORING
+	'--------------------------------------------------
+
+	'	BASE HIT SCORING
+	'	----------------
+	'if player already hit base then no more base scoring
+	'if player hit base then +200 points & flag base hit
+
+	IF CODE.RCVD <> OPPONENT.BASE THEN 9410
+	IF BASE.HITS(PLYR)=1 THEN RETURN
+
+	SCORE(PLYR) = SCORE(PLYR) + 200
+	BASE.HITS(PLYR) = 1
+	GOTO 9430			'exit >>>>>>>>>>>>>>>>>
+
+9410	'	OWN CODE SCORING
+	'	----------------
+	'if player sent own code, then -30
+
+	IF CODE.RCVD <> PLYR.CODE THEN 9420
+	SCORE(PLYR) = SCORE(PLYR) - 30
+	GOTO 9430	' exit >>>>>>>>>>>>>
+	
+9420	'	HIT OPPONENT SCORING
+	'	--------------------
+
+	 IF (CODE.RCVD AND &H1) <> (PLYR.CODE AND &H1) THEN 9430
+			'not same alpha or omega group. exit >>>>>>>>>>>>>
+
+	'code is valid. was not opponent base or own code
+	'therefore, must be opponent code
+
+	'	ck that opponent in game
+
+	IF PLAYING(OPPONENT)=0 THEN 9430	'opponent not in game >>>>
+ 
+	'	-------------------------
+	'	adjust player's score
+	'	--------------------------
+
+	IF SCORE(PLYR)<-200 THEN POINTS=INT(SCORE(PLYR)/-100)*10 ELSE POINTS=10
+
+	SCORE(PLYR) = SCORE(PLYR) + POINTS
+
+	'	----------------------------
+	'	adjust score of opponent hit
+	'	----------------------------
+
+	IF SCORE(OPPONENT) < -100 THEN 9422 
+
+	SCORE(OPPONENT)=SCORE(OPPONENT)-10
+		HIT.CNT = 0
+		GOTO 9430	'exit >>>>>>>>>>>>>>>>>>>>>>>>
+
+9422	'if opponent hit the required no. of times,then substract
+	'10 points from opponent score
+
+	IF HIT.CNT(OPPONENT) => INT(SCORE(OPPONENT)/-100) THEN GOTO 9426
+		HIT.CNT(OPPONENT)=HIT.CNT(OPPONENT)+1
+		GOTO 9430		'exit >>>>>>>>>>>>>>>>>>
+
+9426	SCORE(OPPONENT)=SCORE(OPPONENT)-10
+	HIT.CNT(OPPONENT) = 0
+
+9430	RETURN
+
+
+9500	'TASK SUB
+	'--------------------------------------------------
+	'		LEAGUE SCORING
+	'--------------------------------------------------
+
+	'	BASE HIT SCORING
+	'	----------------
+	'if player already hit base then no more base scoring
+	'if player hit base then +200 points & flag base hit
+
+	IF CODE.RCVD <> OPPONENT.BASE THEN 9510
+	IF BASE.HITS(PLYR)=1 THEN RETURN
+
+	SCORE(PLYR) = SCORE(PLYR) + 200
+	BASE.HITS(PLYR) = 1
+	GOTO 9530			'exit >>>>>>>>>>>>>>>>>
+
+9510	'	OWN CODE SCORING
+	'	----------------
+	'if player sent own code, then -30
+
+	IF CODE.RCVD <> PLYR.CODE THEN 9520
+	SCORE(PLYR) = SCORE(PLYR) - 30
+	GOTO 9530	' exit >>>>>>>>>>>>>
+	
+
+9520	'	HIT OPPONENT SCORING
+	'	--------------------
+
+	 IF (CODE.RCVD AND &H1) <> (PLYR.CODE AND &H1) THEN 9530
+			'not same alpha or omega group. exit >>>>>>>>>>>>>
+
+	'code is valid. was not opponent base or own code
+	'therefore, must be opponent code
+
+	'	ck that opponent in game
+
+	IF PLAYING(OPPONENT)=0 THEN 9530	'opponent not in game >>>>
+
+	SCORE(PLYR) = SCORE(PLYR) + 10
+	SCORE(OPPONENT)=SCORE(OPPONENT)-10
+
+
+9530	RETURN
+
+
+
+9600	'TASK SUB
+	'--------------------------------------------------
+	'		FFA SCORING
+	'--------------------------------------------------
+
+	'	ck that not own code
+	IF CODE.RCVD = PLYR.CODE THEN 9630	'exit >>>>>>>>>>>>>>>
+
+	'	NO BASE HIT SCORING
+	'	-------------------
+	'if player hit base then no scoring
+
+	IF CODE.RCVD = GREEN.BASE THEN 9630	'exit >>>>>>>
+	IF CODE.RCVD = RED.BASE THEN 9630	'exit >>>>>>>
+	
+	'	HIT OPPONENT SCORING
+	'	--------------------
+
+	 IF (CODE.RCVD AND &H1) <> (PLYR.CODE AND &H1) THEN 9630
+			'not same alpha or omega group. exit >>>>>>>>>>>>>
+
+	'code is valid. was not opponent base or own code
+	'therefore, must be opponent code
+
+	'	ck that opponent in game
+
+	IF PLAYING(OPPONENT)=0 THEN 9630	'opponent not in game >>>>
+
+	SCORE(PLYR) = SCORE(PLYR) + 10
+	SCORE(OPPONENT)=SCORE(OPPONENT)-10
+
+
+9630	RETURN
+

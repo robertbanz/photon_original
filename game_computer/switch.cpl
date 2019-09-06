@@ -1,0 +1,173 @@
+
+
+
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'XXXX						XXXX
+	'XXXX		SWITCH DISPLAYS			XXXX
+	'XXXX						XXXX
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'01-18-86 DSe		LASTEST REV 02-1-86 DSe
+
+	DIM MONO.PARA(70)
+	DIM COLOR.PARA(70)
+
+
+7000	'---------------------------------------------------
+	'		PRINT MONO MESSAGES
+	'---------------------------------------------------
+
+	GOSUB 7300	'save color paramters
+	GOSUB 7400	'restore mono parameters
+'	WIDTH 80	'01-20-86
+
+	IF MONO.WB$ <> "" THEN GOTO 7020
+	IF MONO.REV$ <> "" THEN COLOR 0,7: PRINT MONO.REV$;: GOTO 7025
+	IF MONO.STAT$ = "" THEN 7025
+
+	'	print STATUS line. do not allow CR/LF
+
+	MONO.LN=CSRLIN:MONO.COL=POS(0)
+	LOCATE 25,1
+	COLOR 23,0: PRINT MONO.STAT$;
+	COLOR 7,0:PRINT " ";
+	LOCATE MONO.LN,MONO.COL
+	GOTO 7030
+
+7020	'	print line, no cr/lf, cursor to line-col 1
+  
+	IF MONO.WB$ = OLD.MONO.WB$ THEN 7030
+	OLD.MONO.WB$=MONO.WB$
+
+	COLOR 7,0: PRINT MONO.WB$;
+
+
+7025	COLOR 7,0:PRINT " "
+
+7030	MONO.WB$="": MONO.REV$="": MONO.STAT$=""
+
+	GOSUB 7200	'save mono parameters
+	GOSUB 7500	'restore color parameters
+	RETURN
+
+
+7100	'---------------------------------------------------
+	'	CLEAR STATUS LINE
+	'---------------------------------------------------
+
+	GOSUB 7300	'save color paramters
+	GOSUB 7400	'restore mono parameters
+'	WIDTH 80	'01-20-86
+
+	MONO.LN=CSRLIN:MONO.COL=POS(0)
+	LOCATE 25,1
+	COLOR 7,0
+
+	PRINT "                                       ";
+
+	LOCATE MONO.LN,MONO.COL
+	GOSUB 7200	'save mono parameters
+	GOSUB 7500	'restore color parameters
+	RETURN
+
+7150	'---------------------------------------------------
+	'	LINE FEED
+	'---------------------------------------------------
+
+	GOSUB 7300	'save color paramters
+	GOSUB 7400	'restore mono parameters
+
+'	WIDTH 80	'01-20-86
+	COLOR 7,0:PRINT
+
+	GOSUB 7200	'save mono parameters
+	GOSUB 7500	'restore color parameters
+	RETURN
+
+
+7200	'---------------------------------------------------
+	'	SAVE MONO DISPLAY PARAMETERS
+	'---------------------------------------------------
+	DEF SEG=0
+	Y=1: MONO.PARA(Y)=PEEK(&H410):Y=Y+1
+		FOR X=&H449 TO &H466
+			MONO.PARA(Y) = PEEK(X)
+			Y=Y+1
+		NEXT X
+	DEF SEG
+	RETURN
+
+7300	'---------------------------------------------------
+	'	SAVE COLOR DISPLAY PARAMETERS
+	'---------------------------------------------------
+	DEF SEG=0
+	Y=1: COLOR.PARA(Y)=PEEK(&H410):Y=Y+1
+		FOR X=&H449 TO &H466
+			COLOR.PARA(Y) = PEEK(X)
+			Y=Y+1
+		NEXT X
+	DEF SEG
+	RETURN
+
+7400	'---------------------------------------------------
+	'	RESTORE MONO VIDEO PARARMETERS
+	'---------------------------------------------------
+	DEF SEG=0
+	Y=1: POKE &H410,MONO.PARA(Y):Y=Y+1
+		FOR X=&H449 TO &H466
+			POKE X,MONO.PARA(Y)
+			Y=Y+1
+		NEXT X
+	LOCATE PEEK(&H451)+1,PEEK(&H450)+1
+	SCREEN ,,0,0	'2-1-86 DSe
+	DEF SEG
+	RETURN
+
+7500	'---------------------------------------------------
+	'	RESTORE COLOR VIDEO PARARMETERS
+	'---------------------------------------------------
+	DEF SEG=0
+	Y=1: POKE &H410,COLOR.PARA(Y):Y=Y+1
+		FOR X=&H449 TO &H466
+			POKE X,COLOR.PARA(Y)
+			Y=Y+1
+		NEXT X
+	LOCATE PEEK(&H451)+1,PEEK(&H450)+1
+	X=PEEK(&H462): SCREEN ,,X,X
+	DEF SEG
+	RETURN
+
+
+7600	'---------------------------------------------------
+	'	INIT COLOR DISPLAY
+	'---------------------------------------------------
+
+	DEF SEG=0:POKE &H410,(PEEK(&H410) AND &HCF) OR &H10:DEF SEG
+
+	KEY OFF
+	SCREEN 0,1		'****  critical *****
+			'causes INT 10 to init color parameters in video
+			'parameter block seg 0:449h to 466h 
+	WIDTH 40
+	COLOR BLUE,WHITE,RED
+	CLS:LOCATE ,,0
+
+	RETURN
+
+
+7700	'---------------------------------------------------
+	'	INIT MONO DISPLAY
+	'---------------------------------------------------
+
+	DEF SEG=0:POKE &H410,PEEK(&H410) OR &H30:DEF SEG
+
+	KEY OFF
+'	SCREEN 0,1:WIDTH 40	'line added 01-20-86
+	COLOR 7,0,0
+	CLS:LOCATE ,,0
+	GOSUB 7200		'save mono video parameters
+
+	RETURN
+
+
+
+

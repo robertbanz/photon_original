@@ -1,0 +1,507 @@
+
+
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'XXXXXX						XXXXXX
+	'XXXXXX		DATA COMPUTER IO		XXXXXX
+	'XXXXXX						XXXXXX
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'				REV 4-5-86 DSe
+
+
+	' THIS ROUTINE IS RESPONSIBLE FOR SENDING GAME DATA TO THE 
+	' DATA COMPUTER FROM THE GAME PC AT THE CONCLUSION OF EACH GAME.
+4000
+	ENQ = &H05
+	STX = &H02
+	ACKN = &H06
+	NACK = &H15
+
+     ET.DATA = H1DATA
+     ET.INTE = H1INTE
+     ET.LINE = H1LINE
+     ET.MODE = H1MODE
+     ET.STAT = H1STAT
+     ET.MDST = H1MDST
+
+
+'------------------------------------
+'------ START OT TRANSFER TO GP -----
+'------------------------------------
+	ENQ.TRYS = 0
+	STATUS.TRYS = 0
+	TRNSFR.TRYS=0
+	SENT.FLAG = 0
+
+4010	'request status
+	'--------------
+	MONO.WB$="ENQ TO DATA COMPUTER":GOSUB 7000
+	DATA.OUT=ENQ: GOSUB 4920
+	IF ERROR.FLAG=0 THEN ENQ.TRYS = 0:GOTO 4012
+	ENQ.TRYS=ENQ.TRYS+1
+	IF ENQ.TRYS > 2 THEN 4016
+	GOTO 4010
+
+	'get status
+	'----------
+4012	MONO.WB$ = "AWAITING STATUS":GOSUB 7000
+	GOSUB 4900	'get ECHO
+	IF ERROR.FLAG = 0 AND DATA.IN=ACKN THEN STATUS.TRYS=0: GOTO 4014
+	IF ERROR.FLAG = 0 AND DATA.IN=NACK THEN STATUS.TRYS=0: GOTO 4014
+	STATUS.TRYS=STATUS.TRYS + 1
+	IF STATUS.TRYS > 2 THEN ERROR.FLAG =2: GOTO 4016 'no status response
+	GOTO 4010	'try again
+
+4014
+IF SENT.FLAG = 1 AND DATA.IN=ACKN THEN RETURN
+IF SENT.FLAG=1 AND DATA.IN=NACK AND TRNSFR.TRYS>2 THEN ERROR.FLAG=3:GOTO 4016
+
+	'TRANSMIT BLOCK
+	'--------------
+
+	MONO.WB$ = "TXMTING BLOCK":GOSUB 7000
+	GOSUB 4020	'send STX, txmt block & ck sum
+	IF ERROR.FLAG = 0 THEN SENT.FLAG = 1
+	TRNSFR.TRYS = TRNSFR.TRYS + 1
+
+	MONO.WB$ = "BYTES "+STR$(BYTE.CNT):GOSUB 7000
+	MONO.WB$ = "CKSUM "+STR$(CHECK.SUM):GOSUB 7000
+
+	GOTO 4010
+
+
+	'ERROR MESSAGES
+	'--------------
+4016	IF ERROR.FLAG=1 THEN MONO.WB$="NO CTS FROM DATA COMPUTER"
+	IF ERROR.FALG=2 THEN MONO.WB$="NO DATA COMPUTER STATUS RESPONSE"
+	IF ERROR.FLAG=3 THEN MONO.WB$="BLOCK TRANSFER FAILURE"
+	GOSUB 7000
+	RETURN
+
+
+
+	'------------------------------------------------
+	'		TRANSMIT BLOCK
+	'------------------------------------------------
+
+4020	'start of text
+	DATA.OUT=STX:GOSUB 4920
+	IF ERROR.FLAG=1 THEN RETURN
+
+	'begin cksum
+	CHECK.SUM = 0
+	CHECK = 1
+
+	BYTE.CNT=0
+
+	'date
+	X$=DATE$
+	A$=LEFT$(X$,2) + MID$(X$,4,2) + RIGHT$(X$,2)
+	GOSUB 4940
+	IF ERROR.FLAG=1 THEN RETURN
+
+	'time
+	X$=TIME$
+	A$=LEFT$(X$,2) + MID$(X$,4,2)
+	GOSUB 4940
+	IF ERROR.FLAG=1 THEN RETURN
+
+
+	'game number
+	DATA.OUT = GAME.NUMBER MOD 256
+	A$=RIGHT$(STR$(DATA.OUT),2)
+	GOSUB 4940
+	IF ERROR.FLAG=1 THEN RETURN
+
+	'game mode
+	DATA.OUT = GAME.MODE MOD 256
+	A$=RIGHT$(STR$(DATA.OUT),1)
+	GOSUB 4940
+	IF ERROR.FLAG=1 THEN RETURN
+
+	'ALPHA terminal status
+	DATA.OUT = ALPHA.TERMINAL MOD 256
+	A$=RIGHT$(STR$(DATA.OUT),1)
+	GOSUB 4940
+	IF ERROR.FLAG=1 THEN RETURN
+
+	'ALPHA game type
+	DATA.OUT = ALPHA.GAME.TYPE MOD 256 AND &H0F
+	A$=RIGHT$(STR$(DATA.OUT),1)
+	GOSUB 4940
+	IF ERROR.FLAG=1 THEN RETURN
+
+	'OMEGA terminal status
+	DATA.OUT = OMEGA.TERMINAL MOD 256
+	A$=RIGHT$(STR$(DATA.OUT),1)
+	GOSUB 4940
+	IF ERROR.FLAG=1 THEN RETURN
+
+	'OMEGA game type
+	DATA.OUT = OMEGA.GAME.TYPE MOD 256 AND &H0F
+	A$=RIGHT$(STR$(DATA.OUT),1)
+	GOSUB 4940
+	IF ERROR.FLAG=1 THEN RETURN
+
+	'-----------------------------
+	'send ALPHA & OMEGA team names
+	'-----------------------------
+
+     A$ = ALPHA.RED.TEAM.NAME$
+     STRING.LENGTH = 10
+     GOSUB 4800
+     GOSUB 4940
+	IF ERROR.FLAG=1 THEN RETURN
+
+
+     A$ = ALPHA.GREEN.TEAM.NAME$
+     STRING.LENGTH = 10
+     GOSUB 4800
+     GOSUB 4940
+	IF ERROR.FLAG=1 THEN RETURN
+
+
+     A$ = OMEGA.RED.TEAM.NAME$
+     STRING.LENGTH = 10
+     GOSUB 4800
+     GOSUB 4940
+	IF ERROR.FLAG=1 THEN RETURN
+
+
+     A$ = OMEGA.GREEN.TEAM.NAME$
+     STRING.LENGTH = 10
+     GOSUB 4800
+     GOSUB 4940
+	IF ERROR.FLAG=1 THEN RETURN
+
+
+	'------------------------------------
+	'send ALPHA & OMEGA game score totals
+	'------------------------------------
+
+	A$ = STR$(ALPHA.RED.TOTAL)
+	STRING.LENGTH = 6
+	GOSUB 4800
+	GOSUB 4940
+	IF ERROR.FLAG=1 THEN RETURN
+
+	A$ = STR$(ALPHA.GREEN.TOTAL)
+	STRING.LENGTH = 6
+	GOSUB 4800
+	GOSUB 4940
+	IF ERROR.FLAG=1 THEN RETURN
+
+	A$ = STR$(OMEGA.RED.TOTAL)
+	STRING.LENGTH = 6
+	GOSUB 4800
+	GOSUB 4940
+	IF ERROR.FLAG=1 THEN RETURN
+
+	A$ = STR$(OMEGA.GREEN.TOTAL)
+	STRING.LENGTH = 6
+	GOSUB 4800
+	GOSUB 4940
+	IF ERROR.FLAG=1 THEN RETURN
+
+
+	'--------------------------------
+	'send players IDs, names & scores
+	'--------------------------------
+
+     IF GAME.MODE = 2 THEN 4200		'go do dual field
+
+     IF ALPHA.TERMINAL = 0 THEN 4100	'go do OMEGA
+
+
+	'single field ALPHA
+	'------------------
+          FOR X=1 TO 20
+               STRING.LENGTH = 10
+               A$ = SORTED.ALPHA.RED.ID$(X)
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+               A$ = SORTED.ALPHA.RED.NAME$(X)
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+               A$ = STR$(SORTED.ALPHA.RED.SCORE(X))
+               STRING.LENGTH = 5
+               GOSUB 4800     ' PAD A$ WITH BLANKS TO LENGTH OF 5
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+          NEXT X
+
+
+          FOR X=1 TO 20
+               STRING.LENGTH = 10
+               A$ = SORTED.ALPHA.GREEN.ID$(X)
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+               A$ = SORTED.ALPHA.GREEN.NAME$(X)
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+               A$ = STR$(SORTED.ALPHA.GREEN.SCORE(X))
+               STRING.LENGTH = 5
+               GOSUB 4800     ' PAD A$ WITH BLANKS TO LENGTH OF 5
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+          NEXT X
+
+     GOTO 4500		'done >>>>>>>>>>>>>>>>>>>>
+
+
+4100	'single field OMEGA
+	'------------------
+
+	FOR X=1 TO 20
+               STRING.LENGTH = 10
+               A$ = SORTED.OMEGA.RED.ID$(X)
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+               A$ = SORTED.OMEGA.RED.NAME$(X)
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+               A$ = STR$(SORTED.OMEGA.RED.SCORE(X))
+               STRING.LENGTH = 5
+               GOSUB 4800     ' PAD A$ WITH BLANKS TO LENGTH OF 5
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+          NEXT X
+               
+          FOR X=1 TO 20
+               STRING.LENGTH = 10
+               A$ = SORTED.OMEGA.GREEN.ID$(X)
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+               A$ = SORTED.OMEGA.GREEN.NAME$(X)
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+               A$ = STR$(SORTED.OMEGA.GREEN.SCORE(X))
+               STRING.LENGTH = 5
+               GOSUB 4800     ' PAD A$ WITH BLANKS TO LENGTH OF 5
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+          NEXT X
+
+     GOTO 4500 		'done >>>>>>>>>>>>>>>>>>>>>>>>
+
+
+4200	'dual field ALPHA & OMEGA
+	'-------------------------
+          FOR X=1 TO 10
+               STRING.LENGTH = 10
+               A$ = SORTED.ALPHA.RED.ID$(X)
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+               A$ = SORTED.ALPHA.RED.NAME$(X)
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+               A$ = STR$(SORTED.ALPHA.RED.SCORE(X))
+               STRING.LENGTH = 5
+               GOSUB 4800     ' PAD A$ WITH BLANKS TO LENGTH OF 5
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+          NEXT X
+
+          FOR X=1 TO 10
+               STRING.LENGTH = 10
+               A$ = SORTED.ALPHA.GREEN.ID$(X)
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+               A$ = SORTED.ALPHA.GREEN.NAME$(X)
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+               A$ = STR$(SORTED.ALPHA.GREEN.SCORE(X))
+               STRING.LENGTH = 5
+               GOSUB 4800     ' PAD A$ WITH BLANKS TO LENGTH OF 5
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+          NEXT X
+
+          FOR X=1 TO 10
+               STRING.LENGTH = 10
+               A$ = SORTED.OMEGA.RED.ID$(X)
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+               A$ = SORTED.OMEGA.RED.NAME$(X)
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+               A$ = STR$(SORTED.OMEGA.RED.SCORE(X))
+               STRING.LENGTH = 5
+               GOSUB 4800     ' PAD A$ WITH BLANKS TO LENGTH OF 5
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+          NEXT X
+
+          FOR X=1 TO 10
+               STRING.LENGTH = 10
+               A$ = SORTED.OMEGA.GREEN.ID$(X)
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+               A$ = SORTED.OMEGA.GREEN.NAME$(X)
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+               A$ = STR$(SORTED.OMEGA.GREEN.SCORE(X))
+               STRING.LENGTH = 5
+               GOSUB 4800     ' PAD A$ WITH BLANKS TO LENGTH OF 5
+               GOSUB 4940
+		IF ERROR.FLAG=1 THEN RETURN
+
+          NEXT X	'done
+
+
+4500	'-------- send checksum ---------
+
+	DATA.OUT = CHECK.SUM MOD 256
+	CHECK = 0
+	GOSUB 4920
+
+	RETURN
+     
+
+
+	'-------------  SUPPORT SUB  ---------------------
+	' THIS ROUTINE WILL ADD BLANKS TO A$ UNTIL IT HAS
+	' A LENGTH OF STRING.LENGTH
+	'--------------------------------------------------
+
+4800	IF LEN(A$) => STRING.LENGTH THEN RETURN
+	A$ = A$+" "
+	GOTO 4800
+
+
+
+	'---------------------------------------------------------------
+     	' ROUTINE TO INPUT ONE BYTE OF DATA FROM DATA COMPUTER 
+     	' EXIT: DATA.IN contains byte rcvd
+	'---------------------------------------------------------------
+
+4900	ERROR.FLAG = 0
+	DATA.IN = 0
+
+	'---- ck for DATA READY true
+
+	ST = INP(ET.STAT) AND DATA.AVAILABLE
+	IF ST <> 0 THEN 4910
+
+	'---- set RTS true(i.e. CLS to GAME COMPUTER)
+
+	OUT ET.MODE,2
+
+	'---- ck for DATA READY true
+
+	IX=0: ST=0
+	WHILE IX < 6000 AND ST=0
+		ST = INP(ET.STAT) AND DATA.AVAILABLE
+		IX=IX+1
+	WEND
+
+	'---- set RTS false
+
+	OUT ET.MODE,0
+
+	IF ST=0 THEN ERROR.FLAG = 1:RETURN	'data not ready timeout
+
+4910:	'---- read data
+
+     	DATA.IN = INP(ET.DATA)
+
+	RETURN
+
+
+
+	'---------------------------------------------------------------
+     	' ROUTINE TO OUTPUT ONE BYTE OF DATA TO DATA COMPUTER 
+     	' ENTRY: DATA.OUT contains byte to be txmtd
+	'---------------------------------------------------------------
+
+4920	ERROR.FLAG = 0
+
+	'---- ck CLS for true
+
+	OX=0: ST=0
+	WHILE OX < 6000 AND ST=0
+		ST = INP(ET.MDST) AND &H10
+		OX = OX+1
+	WEND
+
+	IF ST=0 THEN ERROR.FLAG = 1: RETURN	'no CLS from data computer
+
+	'---- await TX SHIFT REG EMPTY
+	ST=0
+	WHILE ST = 0
+	     	ST = INP(ET.STAT) AND &H40
+	WEND
+
+	'---- txmt data byte
+
+     	OUT ET.DATA,DATA.OUT
+
+	IF CHECK=1 THEN CHECK.SUM=CHECK.SUM XOR DATA.OUT
+
+	BYTE.CNT=BYTE.CNT + 1
+
+	'---- ck CLS return to false
+
+	OX=0: ST=1
+	WHILE OX < 6000 AND ST <> 0
+		ST = INP(ET.MDST) AND &H10
+		OX = OX+1
+	WEND
+
+	IF ST <> 0 THEN ERROR.FLAG=1
+
+	RETURN
+
+
+
+     '---------------------------------------------------------------
+     ' ROUTINE TO INPUT A STRING FROM DATA COMPUTER
+     ' THE NUMBER OF CHARACTERS IS GIVEN IN THE VARIABLE STRING.LENGTH
+     ' THE STRING IS RETURNED IN A$.
+     '----------------------------------------------------------------	
+4930
+     A$=" "
+          FOR Z=1 TO STRING.LENGTH
+               GOSUB 4900
+               A$=A$ + CHR$(DATA.IN)
+          NEXT Z
+     A$ = RIGHT$(A$,STRING.LENGTH)
+     RETURN
+
+
+     '---------------------------------------------------------------
+     ' ROUTINE TO OUTPUT THE DATA IN STRING A$ TO DATA COMPUTER
+     '---------------------------------------------------------------	
+4940
+	FOR Z=1 TO LEN(A$)
+		DATA.OUT=ASC(MID$(A$,Z,1))
+		GOSUB 4920
+		IF ERROR.FLAG=1 THEN RETURN
+	NEXT Z
+	RETURN
+
+
+
+

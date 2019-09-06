@@ -1,0 +1,59 @@
+
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'XXXX					XXXX
+	'XXXX	   LASER COMPUTER HANDLER	XXXX
+	'XXXX					XXXX
+	'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	'			LASTEST REV 01-31-86
+
+	' TRK# to LASER COMPUTER protocol:
+	'	d P d H d TRK# d CR d
+	'		d is a delay
+	'		string is ASCII
+	'		TRK# is 1 thru 0 (0=TRK 10)
+
+	' LASER COMPUTER START protocol:
+	'	ASCII TAB
+
+
+12000	'TASK SUB
+	'-------------------------------------------
+	'	TRK# TO LASER COMPUTER
+	'-------------------------------------------
+
+	A=&H50:GOSUB 12200
+	A=&H48:GOSUB 12200
+	A=TRACK+&H30:GOSUB 12200
+	A=&H0D:GOSUB 12200
+
+	'---- delay
+	FOR XS=1 TO 300:NEXT XS
+
+	RETURN
+
+
+12100	'TASK SUB
+	'--------------------------------------
+	'	START LASER COMPUTER
+	'--------------------------------------
+
+	A=&H09:GOSUB 12300
+	RETURN
+
+
+12200	'SUPPORT SUB
+	'------------------------------------------
+	' DELAY, CK TXMT SHIFT REG EMPTY, OUT DATA
+	'------------------------------------------
+
+	FOR XS=1 TO 300:NEXT XS
+
+12210	XS=INP(H6STAT) AND &H40
+	IF XS=0 THEN 12210
+
+
+12300	OUT H6DATA,A
+	RETURN
+
+
+
