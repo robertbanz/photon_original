@@ -1,0 +1,247 @@
+
+
+	NAME SNDTST
+	LIST	E
+	NLIST	M,R,T,X
+
+
+        ; DATE:  4-27-87
+	; TEST PROGRAM FOR NEW SOUND BOARD
+
+	FILE	EQUATES.SRC
+
+;--------------------------------
+;       POWER-UP COLDSTART
+;--------------------------------
+
+        CSEG
+
+COLDSTART:      JP INITSYSTEM
+
+;--------------------------------
+;     SYSTEM INITIALIZATION
+;--------------------------------
+
+	ORG 0100H
+
+INITSYSTEM:
+        DI
+
+        ;---- INIT 810	1-30-87
+
+        XOR     A
+        OUT     (DDRA),A         ;PORT A SET AS INPUT
+        OUT     (T0MD),A
+        OUT     (T1MD),A
+        INC     A
+        OUT     (MDR),A          ;PORT A SET TO STROBED MODE INPUT
+
+        LD      A,6
+        OUT     (T0MD),A
+        OUT     (T1MD),A
+
+        LD      A,023H
+        OUT     (DDRC),A
+
+        LD      A,0FFH
+        OUT     (DDRB),A
+
+
+        ;---- ZERO RAM
+
+        LD      HL,RAM1
+        LD      B,080H
+INIT1:  LD      (HL),0
+        INC     HL           
+        DJNZ    INIT1
+
+				;1-30-87 deleted clear RAM2 in 810
+				;on old sound board
+
+        ;---- SET STACK POINTER
+
+        LD SP,STACK
+
+        ;---- SET CONTROL LATCH
+
+        LD A,3BH
+        LD (CONTROL),A
+
+;--------------------------------
+;	SWITCH I/O HANDLER
+;--------------------------------
+
+
+RECYCLE:  ; READ AND MASK SWITCH INPUTS
+
+	LD A,(RFSTAT)
+	AND 0EH
+	LD (SWSTAT),A
+	CALL DELAY3
+	LD A,(SWSTAT)
+	LD B,A
+	LD A,(RFSTAT)
+	AND 0EH
+	CP B
+	JP NZ,RECYCLE
+	LD (SWSTAT),A
+
+SW1:	  ; CHECK FOR SWITCH 1
+
+	LD A,(SWSTAT)
+	CP 00H
+	JP NZ,SW2
+	CALL BACKGND
+	CALL DELAY1
+
+SW2:	  ; CHECK FOR SWITCH 2
+
+	LD A,(SWSTAT)
+	CP 08H
+	JP NZ,SW3
+	CALL GOODHIT
+	CALL DELAY1
+
+SW3:	  ; CHECK FOR SWITCH 3
+
+	LD A,(SWSTAT)
+	CP 04H
+	JP NZ,SW4
+	CALL MISS
+	CALL DELAY1
+
+SW4:	  ; CHECK FOR SWITCH 4
+
+	LD A,(SWSTAT)
+	CP 02H
+	JP NZ,SW5
+	CALL HITOWN
+	CALL DELAY1
+
+SW5:	  ; CHECK FOR SWITCH 5
+
+	LD A,(SWSTAT)
+	CP 0AH
+	JP NZ,SW6
+	CALL IMHIT
+	CALL DELAY1
+
+SW6:	  ; CHECK FOR SWITCH 6
+
+	LD A,(SWSTAT)
+	CP 06H
+	JP NZ,SW7
+	CALL E_BASE
+	CALL DELAY1
+
+SW7:	  ; CHECK FOR SWITCH 7
+
+	LD A,(SWSTAT)
+	CP 0EH
+	JP NZ,RECYCLE
+	CALL GOODHIT
+	CALL DELAY1
+	CALL MISS
+	CALL DELAY1
+	CALL HITOWN
+	CALL DELAY1
+	CALL IMHIT
+	CALL DELAY1
+	CALL E_BASE
+	CALL DELAY1
+	JP RECYCLE
+
+;--------------------------------
+;        GAME SOUNDS             
+;--------------------------------
+
+;---- BACK GOUND CONTINUOUS
+
+BACKGND:
+	CALL SND_RST
+	LD (HL),40H
+	CALL SND_WAIT
+	RET
+
+;---- REMAINING SOUNDS ONE TIME
+
+GOODHIT:
+	CALL SND_RST
+	LD (HL),42H
+	CALL SND_WAIT
+	LD (HL),02H
+	CALL SND_WAIT
+	RET
+
+MISS:
+	CALL SND_RST
+	LD (HL),41H
+	CALL SND_WAIT
+	LD (HL),01H
+	CALL SND_WAIT
+	RET
+
+HITOWN:                                
+	CALL SND_RST
+	LD (HL),43H
+	CALL SND_WAIT
+	LD (HL),03H
+	CALL SND_WAIT
+	RET
+
+IMHIT:                                
+	CALL SND_RST
+	LD (HL),44H
+	CALL SND_WAIT
+	LD (HL),04H
+	CALL SND_WAIT
+	RET
+
+E_BASE:
+	CALL SND_RST
+	LD (HL),45H
+	CALL SND_WAIT
+	LD (HL),05H
+	CALL SND_WAIT
+	RET
+
+SND_RST:
+	LD HL,SOUND
+	LD (HL),80H
+	CALL SND_WAIT
+	RET
+
+SND_WAIT:
+	LD B,0FFH
+WAIT_LOOP:
+	DJNZ WAIT_LOOP
+	RET
+
+;---------------------------------------
+;		DELAYS
+;---------------------------------------
+
+DELAY1:		CALL DELAY2	; 1 second delay
+		CALL DELAY2
+		RET
+
+
+DELAY2:				; 500 msec delay
+
+		LD	A,0FFH
+	DLUP1:	LD	(DLAY),A
+		DEC	A
+		LD	(DLAY),A
+		CALL	DELAY3
+		LD	A,(DLAY)
+		CP	00H
+		JP	NZ,DLUP1
+		RET
+
+DELAY3:				; 50 msec delay
+
+		LD	B,0FFH
+	DLUP2:	DJNZ	DLUP2
+		RET
+
+
