@@ -1,0 +1,2120 @@
+
+
+	NAME SPOD14
+	LIST	E
+	NLIST	M,R,T,X
+
+
+        ;DATE:  10-8-86 14:00  DSe
+	;ALPHA/OMEGA OR BETA POD
+	;variable disrupt time
+
+
+	FILE	EQUATES.SRC
+         
+;--------------------------------       
+;       POWER-UP COLDSTART       
+;--------------------------------
+ 
+        CSEG
+
+COLDSTART:      JP INITSYSTEM
+
+;--------------------------------               
+; RSTC    TIMER 1      16.3 MS    
+;--------------------------------        
+
+	ORG 002CH
+RSTC:	JP      TIMER1       
+
+;--------------------------------               
+;            RSTB                
+;   RF DATA RECEIVED INTERRUPT   
+;--------------------------------         
+ 
+	ORG 0034H
+RSTB:   JP      RFINTR
+
+;--------------------------------               
+; RSTA    TIMER 0     16.3 MS     
+;--------------------------------          
+ 
+	ORG 003CH
+RSTA:   JP      TIMER0
+
+;--------------------------------               
+;     SYSTEM INITIALIZATION      
+;--------------------------------        
+ 
+	ORG 0100H
+ 
+INITSYSTEM:
+        DI
+
+        ;---- INIT 810's
+
+        XOR     A                            
+        OUT     (MDRS),A                      
+        OUT     (DDRA),A                                    
+        OUT     (T0MD),A                                       
+        OUT     (T1MD),A                                     
+        OUT     (T0MDS),A                                       
+        OUT     (T1MDS),A                                     
+        INC     A                
+        OUT     (MDR),A          
+        LD      A,6              
+        OUT     (T0MD),A         
+        OUT     (T1MD),A         
+        OUT     (T0MDS),A        
+        OUT     (T1MDS),A        
+        RRCA                     
+        OUT     (DDRBS),A                                  
+        LD      A,023H           
+        OUT     (DDRC),A                                   
+        LD      A,020H           
+        OUT     (DDRCS),A                                     
+        LD      A,0FFH           
+        OUT     (DDRB),A         
+        LD      A,0FFH           
+        OUT     (DDRAS),A        
+
+        ;---- ZERO RAM 
+
+        LD      HL,RAM1          
+        LD      B,080H           
+INIT1:  LD      (HL),0           
+        INC     HL               
+        DJNZ    INIT1            
+
+        LD      HL,RAM2          
+        LD      B,080H           
+INIT2:  LD      (HL),0           
+        INC     HL               
+        DJNZ    INIT2            
+
+        ;---- SET STACK POINTER
+        LD SP,STACK
+
+        ;---- SET CONTROL LATCH
+        LD A,3BH
+        LD (CONTROL),A
+
+        ;---- START BACKGROUND SOUNDS
+
+        CALL BACKGND             
+
+;--------------------------------                   
+;    CONFIGURE POD VIA E.T.           
+;--------------------------------                  
+
+GUN:
+        IN      A,(PTA)                                 
+        CP      09DH             
+        JP      NZ,GUN           
+
+        LD      (SYNC1),A       ;BARKER
+
+GUN1:   IN      A,(PTA)                                 
+        CP      062H             
+        JP      NZ,GUN1          
+
+        LD      (SYNC2),A       ;/BARKER
+
+GUN2:   IN      A,(PTA)          
+        CP      062H             
+        JP      Z,GUN2           
+
+        LD      (CODE),A        ;IR/RF CODE
+        OUT     (PTB),A          
+        LD      B,A              
+GUN3:   IN      A,(PTA)          
+        CP      B                
+        JP      Z,GUN3           
+
+        LD      (SLOT),A        ;MY SLOT          
+        LD      B,A              
+GUN4:   IN      A,(PTA)          
+        CP      B                
+        JP      Z,GUN4           
+        
+        LD      (GAMETYPE),A    ;GAMETYPE
+        LD      B,A              
+GUN5:   IN      A,(PTA)          
+        CP      B                
+        JP      Z,GUN5           
+
+        LD      (CKBYTE),A      ;CHECKSUM
+
+        ;---- VALIDATE CHECKSUM
+
+XORCHK:
+        LD      A,(SYNC1)        
+        LD      B,A              
+        LD      A,(SYNC2)        
+        XOR     B                
+        LD      C,A              
+        LD      A,(CODE)         
+        LD      B,A              
+        LD      A,C              
+        XOR     B                
+        LD      C,A              
+        LD      A,(SLOT)         
+        LD      B,A              
+        LD      A,C              
+        XOR     B                
+        LD      C,A              
+        LD      A,(GAMETYPE)     
+        LD      B,A              
+        LD      A,C              
+        XOR     B                
+        LD      B,A              
+        LD      A,(CKBYTE)       
+        CP      B                 
+        JP      NZ,GUN          ;BAD CHECKSUM           
+
+        ;---- VALIDATE CODE
+
+        LD      A,(CODE)         
+        LD      HL,CODETBL       
+        CALL    TBLSEARCH                                    
+        JP      C,GUN                                  
+
+	;---- SET SYSTEM TYPE	10/1/86
+
+	LD A,(GAMETYPE)
+	AND 0F0H
+	LD (SYSTYPE),A		;E0H = ALPHA/OMEGA   C0H = BETA
+
+	LD A,(GAMETYPE)
+	OR 0E0H
+	LD (GAMETYPE),A		;E1 = PUBLIC  E2 = LEAGUE  E3 = FFA
+
+NOLOAD:                          
+        LD      A,(CODE)
+        OUT     (PTB),A         ;SET IR XMIT CODE
+        LD      A,0B5H          ;IR ON - TEAM - XMIT OFF - GREEN LED OFF
+        LD      (CONTROL),A     ;HELMET OFF - NO RFRDA,IRRDA OR MR RESET
+        LD      (IO),A           
+        
+        ;---- SET TASK TO PSYNC
+        ;---- SET SYSREQ TO PREGAME
+        LD      A,PSYNC
+        LD      (TASK),A
+
+        LD      A,PREGAME
+        LD      (SYSREQ),A
+
+        CALL    RESYNC
+
+        EI
+
+;XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+;XXXX                                  XXXX
+;XXXX      TRIGGER TASK HANDLER        XXXX
+;XXXX                                  XXXX
+;XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+
+TRIG:   ;---- AWAIT TRIGGER PULL
+
+        LD A,(RFSTAT)
+        BIT 1,A
+        JR Z,TRIG
+
+	; check for DISRUPT set in RF_LISTEN	10/1/86
+
+	LD A,(SYSREQ)
+	CP DISRUPT
+	JR Z,TRIG
+
+        ;---- PARSER TRIGGER TASK PER (TASK)
+
+        LD HL,TRIGRET   ;RET ADDR TO STACK
+        PUSH HL
+
+TRIG1:  LD      A,(TASK)
+        CP      PSYNC
+        JP      Z,PTRIG
+        CP      GSYNC
+        JP      Z,GTRIG
+
+        CP      GENTRY
+        JP      Z,PTRIG
+
+        POP     HL      ;NOT FOUND. CLR STACK
+ 
+TRIGRET:
+        JP      TRIG
+ 
+;********************************************
+;***        PREGAME TRIGGER TASK          ***
+;********************************************
+
+PTRIG:
+        CALL    GTRIG
+        RET
+
+;********************************************
+;***          GAME TRIGGER TASK           ***                  
+;********************************************
+
+GTRIG:
+        ;---- START TRIGGER PULL DURATION TIMER
+
+        LD      HL,875
+        LD      (TRIGTIME),HL
+
+TG2:    ;---- INIT FOR THIS NEW TRIGGER PULL
+
+        CALL    IROFF
+        CALL    IRRST
+        IN      A,(PTA)         ;CLEAR ANY OLD IR DATA IN 810
+
+TG21:   ;---AWAIT TRIGGER PULL TIMEOUT OR IR DATA
+
+        CALL    TIMEOUT
+        JP      C,MEXIT         ;TIMED OUT                
+
+        LD      A,(RFSTAT)
+        BIT     4,A
+        JR      Z,TG21          ;NO IR READ
+
+        ;---- READ IR & VALIDATE
+
+        IN      A,(PTA)
+
+        LD (THISHIT),A
+        LD      HL,CODETBL
+        CALL    TBLSEARCH
+        JR      C,TG2           ;IR DATA INVALID
+
+;-------------------------------
+;     PROCESS VALID IR CODE     
+;-------------------------------
+
+        CALL    IRON
+
+        ;---- GET ACTION TASK ADDR TO HL
+
+        CALL    ACTION
+        JP      C,TG2   ;NO ACTION ROUTINE FOUND >>>
+        PUSH    HL
+        CALL    CKCNT
+        POP     HL
+
+        ;---- CALL ACTION TASK
+
+        LD      DE,GRET         ;RET ADDR TO STACK
+        PUSH    DE
+        JP      (HL)
+
+GRET:   ;---- INIT FOR NEXT TRIGGER PULL
+
+        LD      A,(THISHIT)
+        LD      (LASTHIT),A
+        CALL    TGWAIT
+        RET
+
+;---------  MISS EXIT ----------
+
+MEXIT:
+        CALL    IRON
+        CALL    IRMISS
+        RET
+
+;-------------------------------------   
+;          TRIGGER ACTION             
+;CAUSES POD GAME ACTION PER POD COLOR,
+;   GAMETYPE,FIELD & IR CODE READ         
+;-------------------------------------     
+ 
+ACTION:
+	LD A,(SYSTYPE)
+	CP 0C0H
+	JP Z,BETA_ACTION	'do beta
+ 
+;-------------------------------------
+;   PARSER PLAYER/PLAYER ACTION TASK  
+;-------------------------------------
+
+        ;---- LOAD REGS WITH GAME CONDITIONS
+	
+        LD      A,(CODE)
+        AND     0C1H
+        LD      C,A
+
+        LD      A,(GAMETYPE)
+        LD      H,A
+
+        LD      A,(THISHIT)     ;IR CODE READ
+        AND     0C1H            ;COLOR CODE
+        LD      L,A
+        LD      IX,PLYTBL
+        CALL    ACTPAR
+        RET     NC              ;(HL)=TASK ADDR
+
+	JP OBJECT_ACTION
+ 
+;----------------------------------------
+;   BETA PARSER PLAYER/PLAYER ACTION TASK  
+;----------------------------------------
+
+BETA_ACTION:
+
+        ;---- LOAD REGS WITH GAME CONDITIONS
+	
+        LD      A,(CODE)
+        AND     0C0H		;10/3/86
+        LD      C,A
+
+        LD      A,(GAMETYPE)
+        LD      H,A
+
+        LD      A,(THISHIT)     ;IR CODE READ
+        AND     0C0H            ;COLOR CODE
+        LD      L,A
+        LD      IX,PLYTBL_B
+        CALL    ACTPAR
+        RET     NC              ;(HL)=TASK ADDR
+
+
+;-------------------------------------
+;  PARSER PLAYER OBJECT ACTION TASK      
+;-------------------------------------
+
+OBJECT_ACTION:
+
+        ;---- LOAD REGS WITH GAME CONDITIONS
+	
+        LD      A,(CODE)
+        AND     0C0H
+        LD      C,A
+        LD      A,(GAMETYPE)
+        LD      H,A
+        LD      A,(THISHIT)     ;IR CODE READ
+        LD      L,A
+        LD      IX,OBJTBL
+        CALL    ACTPAR
+        RET
+
+;------------------------------- 
+;     TABLE  ACTION PARSER      
+;------------------------------- 
+
+ACTPAR:
+        ;---- GET NO. RECS IN TBL
+
+        PUSH    HL              ;SAVE CONDITIONS
+        PUSH    IX              ;SAVE POINTER
+        POP     HL              ;PUT POINTER IN HL
+        LD      B,(HL)          ;PUT # OF RECS IN B
+
+        ;---- POINT IX TO 1ST REC
+
+        INC     HL              ;POINT TO FIRST REC
+        PUSH    HL              ;SAVE POINTER
+        POP     IX              ;PUT POINTER BACK IN IX
+        POP     HL              ;RESTORE CONDITIONS
+
+        ;----MAKE DE REC LENGTH
+
+        LD      DE,5
+
+;------------------------------- 
+; SEARCH TBL RECS FOR CONDITION 
+;------------------------------- 
+ 
+APAR1:
+        LD      A,(IX+0)
+        CP      C
+        JR      NZ,APAR2        ;NO POD COLOR/FIELD
+
+        LD      A,(IX+1)
+        CP      H
+        JR      NZ,APAR2        ;NOT GAMETYPE
+
+        LD      A,(IX+2)
+        CP      L
+        JR      Z,APAR3
+
+APAR2:  ;---- CONDITIONS NOT FOUND
+
+        ADD     IX,DE
+        DJNZ    APAR1           
+        SCF
+        RET
+
+APAR3:  ;---- CONDITIONS FOUND
+        ;LOAD HL ACTION TASK ADDR
+
+        LD      L,(IX+3)
+        LD      H,(IX+4)
+        OR      A               ;CLEAR CF
+        RET
+
+;------  SYSREQ - TASK - TASK REQUEST ----
+ 
+DOTABLE:
+        DB      9      ;NO. OF TBL RECS
+
+        DB PREGAME,PSYNC,PSYNC
+        DW TH_PPP
+
+        DB PREGAME,PSYNC,RSYNC
+        DW TH_PPR
+
+        DB PREGAME,GENTRY,GSYNC
+        DW TH_PEG
+
+        DB PREGAME,GENTRY,RSYNC
+        DW TH_PER
+
+        DB GAME,GSYNC,GSYNC
+        DW TH_GGG
+
+        DB GAME,GSYNC,ESYNC
+        DW TH_GGE
+
+        DB GAME,GSYNC,RSYNC
+        DW TH_GGR
+
+        DB GAME,ESYNC,ESYNC
+        DW TH_GEE
+
+        DB GAME,ESYNC,RSYNC
+        DW TH_GER
+
+;----- DO DEFAULT TABLE
+
+DODFTBL: 
+        DB      7       ;NO. OF RECS IN TABLE
+
+        DB PREGAME,PSYNC,0
+        DW DF_PP
+
+        DB PREGAME,GENTRY,0
+        DW DF_PE
+
+        DB GAME,GSYNC,0
+        DW DF_GG
+
+        DB GAME,DSYNC,0
+        DW DF_GD
+
+        DB GAME,ESYNC,0
+        DW DF_GE
+
+        DB DISRUPT,GSYNC,0
+        DW DF_DG
+
+        DB DISRUPT,DSYNC,0
+        DW DF_DD
+
+
+;------  PLAYER - GAMETYPE - PLAYER TABLE  -----
+
+PLYTBL: DB      24              ;# OF RECS IN TBL
+ 
+        DB      REDALPHA,FFA,REDALPHA
+        DW      XOHIT
+
+        DB      REDALPHA,FFA,GRNALPHA
+        DW      XOHIT
+
+        DB      REDALPHA,PUBIC,REDALPHA
+        DW      XFHIT
+
+        DB      REDALPHA,PUBIC,GRNALPHA
+        DW      XOHIT
+
+        DB      REDALPHA,LEAGUE,REDALPHA
+        DW      XFHIT
+
+        DB      REDALPHA,LEAGUE,GRNALPHA
+        DW      XOHIT
+
+        DB      GRNALPHA,FFA,GRNALPHA
+        DW      XOHIT
+
+        DB      GRNALPHA,FFA,REDALPHA
+        DW      XOHIT
+
+        DB      GRNALPHA,PUBIC,GRNALPHA
+        DW      XFHIT
+
+        DB      GRNALPHA,PUBIC,REDALPHA
+        DW      XOHIT
+
+        DB      GRNALPHA,LEAGUE,GRNALPHA
+        DW      XFHIT
+
+        DB      GRNALPHA,LEAGUE,REDALPHA
+        DW      XOHIT
+
+        DB      REDOMEGA,FFA,REDOMEGA
+        DW      XOHIT
+
+        DB      REDOMEGA,FFA,GRNOMEGA
+        DW      XOHIT
+
+        DB      REDOMEGA,PUBIC,REDOMEGA
+        DW      XFHIT
+
+        DB      REDOMEGA,PUBIC,GRNOMEGA
+        DW      XOHIT
+
+        DB      REDOMEGA,LEAGUE,REDOMEGA
+        DW      XFHIT
+
+        DB      REDOMEGA,LEAGUE,GRNOMEGA
+        DW      XOHIT
+
+        DB      GRNOMEGA,FFA,GRNOMEGA
+        DW      XOHIT
+
+        DB      GRNOMEGA,FFA,REDOMEGA
+        DW      XOHIT
+
+        DB      GRNOMEGA,PUBIC,GRNOMEGA
+        DW      XFHIT
+
+        DB      GRNOMEGA,PUBIC,REDOMEGA
+        DW      XOHIT
+
+        DB      GRNOMEGA,LEAGUE,GRNOMEGA
+        DW      XFHIT
+
+        DB      GRNOMEGA,LEAGUE,REDOMEGA
+        DW      XOHIT
+
+
+
+;------  BETA PLAYER - GAMETYPE - PLAYER   TABLE  -----
+
+PLYTBL_B:
+
+	DB      12              ;# OF RECS IN TBL
+ 
+        DB      RED,FFA,RED
+        DW      XOHIT
+
+        DB      RED,FFA,GRN
+        DW      XOHIT
+
+        DB      RED,PUBIC,RED
+        DW      XFHIT
+
+        DB      RED,PUBIC,GRN
+        DW      XOHIT
+
+        DB      RED,LEAGUE,RED
+        DW      XFHIT
+
+        DB      RED,LEAGUE,GRN
+        DW      XOHIT
+
+        DB      GRN,FFA,GRN
+        DW      XOHIT
+
+        DB      GRN,FFA,RED
+        DW      XOHIT
+
+        DB      GRN,PUBIC,GRN
+        DW      XFHIT
+
+        DB      GRN,PUBIC,RED
+        DW      XOHIT
+
+        DB      GRN,LEAGUE,GRN
+        DW      XFHIT
+
+        DB      GRN,LEAGUE,RED
+        DW      XOHIT
+
+
+;----- PLAYER - GAMETYPE - OBJECT TBL ----;
+
+OBJTBL: DB      34              ;# OF RECS IN TBL
+ 
+        DB      RED,PUBIC,GBASE
+        DW      XBASE
+ 
+        DB      RED,LEAGUE,GBASE
+        DW      XBASE
+
+        DB      RED,PUBIC,GTOWER
+        DW      XBASE
+
+        DB      RED,LEAGUE,GTOWER
+        DW      XTOWER
+
+        DB      RED,PUBIC,TARGET
+        DW      XTARGET
+
+        DB      RED,LEAGUE,TARGET
+        DW      XTARGET
+
+        DB      RED,PUBIC,RBASE
+        DW      XNULL
+
+        DB      RED,LEAGUE,RBASE
+        DW      XNULL
+
+        DB      RED,FFA,RBASE
+        DW      XNULL
+
+        DB      RED,PUBIC,RTOWER
+        DW      XNULL
+
+        DB      RED,LEAGUE,RTOWER
+        DW      XNULL
+
+        DB      RED,FFA,RTOWER
+        DW      XNULL
+ 
+        DB      GRN,PUBIC,RBASE
+        DW      XBASE
+
+        DB      GRN,LEAGUE,RBASE
+        DW      XBASE
+
+        DB      GRN,PUBIC,RTOWER
+        DW      XBASE
+
+        DB      GRN,LEAGUE,RTOWER
+        DW      XTOWER
+
+        DB      GRN,PUBIC,TARGET
+        DW      XTARGET
+
+        DB      GRN,LEAGUE,TARGET
+        DW      XTARGET
+
+        DB      GRN,PUBIC,GBASE
+        DW      XNULL
+
+        DB      GRN,LEAGUE,GBASE
+        DW      XNULL
+
+        DB      GRN,FFA,GBASE
+        DW      XNULL
+ 
+        DB      GRN,PUBIC,GTOWER
+        DW      XNULL
+
+        DB      GRN,LEAGUE,GTOWER
+        DW      XNULL
+
+        DB      GRN,FFA,GTOWER
+        DW      XNULL
+
+
+        DB      RED,PUBIC,GBASE2
+        DW      XBASE
+ 
+        DB      RED,LEAGUE,GBASE2
+        DW      XBASE
+
+        DB      RED,PUBIC,RBASE2
+        DW      XNULL
+
+        DB      RED,LEAGUE,RBASE2
+        DW      XNULL
+
+        DB      RED,FFA,RBASE2
+        DW      XNULL
+
+        DB      GRN,PUBIC,RBASE2
+        DW      XBASE
+
+        DB      GRN,LEAGUE,RBASE2
+        DW      XBASE
+
+        DB      GRN,PUBIC,GBASE2
+        DW      XNULL
+
+        DB      GRN,LEAGUE,GBASE2
+        DW      XNULL
+
+        DB      GRN,FFA,GBASE2
+        DW      XNULL
+ 
+
+
+ 
+;-------------------------------
+;       XNULL - GOOD HIT        
+;-------------------------------
+
+XNULL:
+        CALL    GOODHIT
+        RET
+ 
+;------------------------------- 
+;     XFHIT - HIT FRIENDLY      
+;------------------------------- 
+ 
+XFHIT:
+        LD      A,(CODE)        ;XMIT OWN POD CODE
+        LD      (TXFRIEND),A
+
+        CALL    HITOWN
+
+        RET
+
+;------------------------------- 
+;     XOHIT - HIT OPPONENT      
+;------------------------------- 
+ 
+XOHIT:
+        ;CHK FOR 3 HIT LIMIT
+ 
+        LD      A,(HITCNTR)
+        CP      3
+        JR      Z,X01
+ 
+
+	;10/1/86
+
+	LD	A,(HITS_OUT)
+	INC	A
+	LD	(HITS_OUT),A
+
+        LD      A,(THISHIT)
+        LD      (TXOPPONENT),A
+        CALL    GOODHIT
+        RET
+
+X01:    CALL    MISS
+        RET
+
+;-------------------------------- 
+;          XHIT BASE             
+;-------------------------------- 
+ 
+XBASE:
+        CALL    GOODHIT             
+
+        LD      A,(HITCNTR)
+        CP      2
+        RET     C               ;<3 CONSEQ HITS
+ 
+        LD      A,(THISHIT)     ;XMIT HIT
+        LD      (TXBASE),A       
+        RET                      
+
+;-------------------------------- 
+;           HIT TOWER            
+;-------------------------------- 
+ 
+XTOWER:
+        CALL    GOODHIT          
+                                 
+        LD      A,(HITCNTR)
+        CP      2
+        RET     C               ;<3 CONSEQ HITS
+  
+        LD      A,(THISHIT)     ;XMIT HIT
+        LD      (TXTOWER),A      
+        RET                      
+
+;-------------------------------- 
+;          HIT TARGET            
+;-------------------------------- 
+ 
+XTARGET:
+        CALL    GOODHIT          
+                                 
+        LD      A,(HITCNTR)
+        CP      2
+        RET     C               ;<3 CONSEQ HITS
+ 
+        LD      A,(THISHIT)     ;XMIT HIT
+        LD      (TXTARGET),A     
+        RET                      
+
+;-------------------------------           
+;     TRIGGER DURATION TIMER     
+;  MAINTAINS SOFTWARE COUNTER      
+;  EXIT:                           
+; IF TIMES OUT,SETS CF,RETURNS    
+; ELSE RETURNS WITH CF CLEARED        
+;-------------------------------             
+
+TIMEOUT:
+        LD      HL,(TRIGTIME)    
+        DEC     HL               
+        LD      (TRIGTIME),HL    
+
+        LD      A,H              
+        OR      L                
+        SCF                      
+        RET     Z               ;TIMED OUT       
+
+        OR      A               ;CLEAR CF
+        RET                      
+
+;---------------------------------------  
+;            CHECK COUNT                 
+;MAINT N0. OF CONSEQ HITS IN HITCNTR     
+;IF 3 HIT LIMIT,THEN RETS WITH CF SET.   
+;ELSE RETS WITH CF CLEARED               
+;---------------------------------------  
+         
+CKCNT:
+        LD      HL,LASTHIT       
+        LD      A,(THISHIT)      
+        CP      (HL)             
+        JR      NZ,CKCNT1         
+
+        ;---- CHECK FOR 3 HIT LIMIT
+ 
+        LD      HL,HITCNTR       
+        LD      A,3              
+        CP      (HL)             
+        SCF      
+        RET     Z                
+        INC     (HL)             
+        OR      A                
+        RET                      
+
+CKCNT1: ;---- CLEAR COUNTER
+ 
+        LD      HL,HITCNTR       
+        LD      (HL),0           
+        OR      A                
+        RET                      
+
+;--------------------------------          
+;           IRMISS               
+;--------------------------------             
+ 
+IRMISS:
+        CALL    MISS             
+        CALL    TGWAIT           
+        RET                      
+
+;--------------------------------           
+;           TGWAIT               
+;--------------------------------            
+ 
+TGWAIT:                                           
+        CALL    DEL1K           ;DELAY 1.1 SEC
+
+        ;----- AWAIT TRIGGER RELEASE
+
+TGW1:
+        LD      A,(RFSTAT)       
+        BIT     1,A              
+        JR      NZ,TGW1          
+        RET                      
+
+;********************************************
+;***    RF INTERRUPT SERVICE              ***
+;***       RF INTR ENABLED BY RESYNC      ***
+;***       RF INTR DISABLED BY SYNCTIMERS ***
+;********************************************
+
+RFINTR:
+        PUSH    AF               
+        PUSH    BC               
+        PUSH    DE               
+        PUSH    HL               
+        PUSH    IX               
+        PUSH    IY               
+
+        CALL SYNC
+
+RFRET: ;---- RF INTERRUPT EXIT  
+
+        CALL CLRALL
+        CALL RSTRF
+
+        POP     IY               
+        POP     IX               
+        POP     HL               
+        POP     DE               
+        POP     BC               
+        POP     AF               
+
+        EI                       
+        RET                      
+
+;-------------------------------- 
+;            RE SYNC             
+;-------------------------------- 
+
+RESYNC:                        
+        ;---- DISABLE TIMERS 0 & 1
+        ;---- ENABLE RF INTR
+        LD A,04H
+        OUT (0BBH),A
+
+        RET                      
+
+
+;-------------------------------- 
+;           RF LISTEN            
+;-------------------------------- 
+ 
+RFLISTEN:                              
+ 
+        ;---- 1ST LISTEN SLOT RANGE 24-29
+
+        LD      A,(SLOTCN)       
+        LD      B,A              
+        LD      A,29             
+        CP      B                
+        JR      C,RF1            
+        LD      A,B              
+        CP      24               
+        JP      NC,RF2           
+
+        ;---- 2ND LISTEN SLOT RANGE 54-59
+
+RF1:    LD      A,59             
+        CP      B                
+        RET     C               ;NOT IN RANGE      
+        LD      A,B              
+        CP      54               
+        RET     C               ;NOT IN RANGE             
+
+        ;---- CK RF RDA
+
+RF2:    LD A,(RFSTAT)
+        BIT 3,A
+        RET NZ          ;NO RF RDA
+
+        ;---- GET RF DATA TO (RFDATA)
+
+        CALL RCVRF
+
+        ;---- CHECK FOR POD CODE
+
+        LD      A,(RFDATA)       
+        LD      HL,CODE          
+        CP      (HL)             
+        RET     NZ              ;NOT HIT                       
+         
+        ;-------MAKE HIT ACTION
+
+        CALL    IMHIT
+        CALL    STUN
+        LD      HL,GOTHIT
+        INC     (HL)
+        LD      A,DISRUPT
+        LD      (SYSREQ),A  
+
+        ;---- INC POD HIT
+
+        LD HL,HITS_IN
+        INC (HL)
+
+        LD HL,PODHIT
+        INC (HL)
+
+	;10/1/86 variable disrupt
+
+	CALL GET_DISRUPT
+
+        RET
+
+
+;-------------------------------- 
+;            SYNC                
+;CALLED BY: RFINTR SYNC0
+;-------------------------------- 
+
+
+SYNC:   ;---- VALIDATE RF DATA AS A SYNC
+        CALL    RCVRF
+        LD      A,(RFDATA)                  
+        LD      HL,SYNCTBL       
+        CALL    TBLSEARCH        
+        RET     C               ;INVALID SYNC       
+
+        LD      A,(RFDATA)       
+        LD      (TASKREQ),A      
+                                  
+        CALL SYNCTIMERS          
+
+        RET                      
+
+;-------------------------------- 
+;           SYNC TIMERS          
+;CALLED BY:SYNC
+;-------------------------------- 
+
+SYNCTIMERS:
+        ;RE-LOAD TIMER 0
+
+        XOR     A               ;STOP & RESET TIMER 0
+        OUT     (T0MD),A         
+        LD      A,6             ;SET TIMER TO MODE 6
+        OUT     (T0MD),A         
+        LD      A,039H          ;LOAD LSB
+        OUT     (T0LSB),A        
+        LD      A,1             ;LOAD MSB
+        OUT     (T0MSB),A        
+
+        ;RE-LOAD TIMER 1
+
+        XOR     A               ;STOP & RESET TIMER 1
+        OUT     (T1MD),A         
+        LD      A,6             ;SET TIMER TO MODE 6
+        OUT     (T1MD),A         
+        LD      A,039H          ;LOAD LSB
+        OUT     (T1LSB),A        
+        LD      A,1             ;LOAD MSB
+        OUT     (T1MSB),A        
+
+        CALL    DELAY2           
+        OUT     (STRT0),A       ;START TIMER 0
+
+        CALL    DELAY4           
+        OUT     (STRT1),A       ;START TIMER 1
+
+        LD      A,1              
+        LD      (SLOTCN),A       
+        XOR     A                
+        LD      (SYNCMISSED),A   
+
+        ;---- SET RCVD SYNC
+        LD A,(TASKREQ)          ;SEE SYNC
+        LD (RCVDSYNC),A
+
+        ;---- DISABLE RF INTR
+        ;---- ENABLE TIMERS 0 & 1 INTRS
+        LD A,0AH
+        OUT (0BBH),A
+
+        RET                      
+
+
+
+;**********************************************
+;***         TIMER 0 TASK PARSER            ***
+;**********************************************
+
+TIMER0:                           
+        PUSH    AF               
+        PUSH    BC               
+        PUSH    DE               
+        PUSH    HL               
+        PUSH    IX               
+        PUSH    IY               
+
+        CALL HNDMISS
+
+        ;---- PARSER PER (TASK)
+
+        LD HL,T1RET     ;RET ADDR TO STACK
+        PUSH HL
+
+        LD      A,(TASK)         
+
+        CP      GSYNC
+        JP      Z,GSYNC0
+
+        CP      DSYNC
+        JP      Z,DSYNC0
+
+        POP HL          ;NOT FOUND. CLR RET FROM STACK
+
+TIRET:  POP     IY               
+        POP     IX               
+        POP     HL               
+        POP     DE               
+        POP     BC               
+        POP     AF               
+        EI                       
+        RET                      
+
+;---------------------------------
+;       HANDLE SYNC MISSED
+;---------------------------------
+
+HNDMISS:
+        LD A,(SLOTCN)
+        CP 1
+        RET NZ
+
+        LD HL,SYNCMISSED
+        INC (HL)
+
+        LD A,15
+        CP (HL)
+        RET NZ
+
+        LD A,RSYNC
+        LD (TASKREQ),A
+        RET
+
+
+
+;-------------------------------
+;            GET TASK           
+;-------------------------------
+
+GETTASK:                              
+        ;---- IF NOT SLOT 2, THEN RET
+        LD A,(SLOTCN)
+        CP 2
+        RET NZ
+
+        ;DO TASK
+        LD      A,(SYSREQ)
+        LD      C,A
+        LD      A,(TASK)
+        LD      H,A
+        LD      A,(TASKREQ)
+        LD      L,A
+        LD      IX,DOTABLE
+        CALL    ACTPAR
+        JR      NC,INITASK      ;TASK FOUND
+
+
+        ;DEFAULT
+        LD A,(SYSREQ)
+        LD C,A
+        LD A,(TASK)
+        LD H,A
+        LD A,0
+        LD L,A
+        LD IX,DODFTBL
+        CALL ACTPAR
+         
+INITASK:                         
+        LD      DE,GTRET
+        PUSH    DE
+        JP      (HL)
+GTRET:  RET
+
+;--------------------------------
+;            GYSNC0
+;--------------------------------
+ 
+GSYNC0:
+        CALL HNDTXMTR
+
+        CALL RFLISTEN
+        RET
+
+ 
+;--------------------------------
+;            DSYNC0
+;--------------------------------
+
+DSYNC0:
+        CALL HNDTXMTR
+        CALL RFLISTEN
+        RET
+
+
+;--------------------SUPPORT SUB
+;       HANDLE TXMTR ON/OFF
+;--------------------------------
+
+HNDTXMTR:
+        ;---- IF POD TIME SLOT-1, TXMTR ON
+        LD A,(SLOT)
+        DEC A
+        LD HL,SLOTCN
+        CP (HL)
+        JR NZ,HT_1
+        CALL TXMTON
+        RET
+
+        ;---- IF POD SLOT TIME, TXMTR OFF
+HT_1:   LD A,(SLOT)
+        CP (HL)
+        CALL Z,TXMTOFF
+        RET
+
+
+
+;*****************************************
+;***       TIMER 1 TASK PARSER         ***
+;*****************************************
+
+TIMER1:                             
+        PUSH    AF               
+        PUSH    BC               
+        PUSH    DE               
+        PUSH    HL               
+        PUSH    IX               
+        PUSH    IY               
+
+        CALL RSTRF
+        CALL    HNDSLOT          
+        CALL SYNC0
+        CALL GETTASK
+
+        ;---- PARSER PER (TASK)
+
+        LD      HL,T1RET         
+        PUSH    HL               
+
+        LD      A,(TASK)         
+
+        CP      GSYNC            
+        JP      Z,GSYNC1         
+        CP      DSYNC            
+        JP      Z,DSYNC1         
+        CP      ESYNC            
+        JP      Z,ESYNC1         
+
+        POP     HL               
+
+T1RET:  POP     IY               
+        POP     IX               
+        POP     HL               
+        POP     DE               
+        POP     BC               
+        POP     AF               
+        EI                       
+        RET                      
+
+;--------------------------------        
+;        HANDLE  SLOT            
+;--------------------------------           
+
+HNDSLOT:                              
+        LD      HL,SLOTCN        
+        INC     (HL)             
+        LD      A,67             
+        CP      (HL)             
+        RET     NZ               
+ 
+        LD      (HL),0           
+        RET                      
+
+;--------------------------------
+;    SYNC AT SLOT 0
+;--------------------------------
+
+SYNC0:
+        LD A,(SLOTCN)
+        CP 0
+        RET NZ
+
+        ;---- CLR TASKREQ
+        XOR A
+        LD (TASKREQ),A
+        LD A,SMISS
+        LD (RCVDSYNC),A
+
+        ;---- START SOFTWARE TIMER
+        LD BC,0111H       ;14 MS
+
+        ;---- CK RF RDA
+SY_1:   LD A,(RFSTAT)
+        BIT 3,A
+        JP Z,SY_2           ;RF RDA PRESENT
+
+        ;---- TIMED OUT?
+        DEC BC
+        LD A,B
+        OR C
+        JR NZ,SY_1
+        RET
+
+SY_2:   LD A,SERROR
+        LD (RCVDSYNC),A
+        CALL SYNC
+        RET
+
+
+;--------------------------------         
+;         GSYNC TIMER 1             
+;--------------------------------         
+
+GSYNC1:
+        ;---- TXMT IF POD TIME SLOT
+
+        LD      HL,SLOT          
+        LD      A,(SLOTCN)       
+        CP      (HL)             
+        RET     NZ              ;NOT POD SLOT          
+
+        XOR     A                
+
+        LD      HL,TXOPPONENT    
+        CP      (HL)             
+        JP      NZ,TXMTOPP       
+
+        LD      HL,TXFRIEND      
+        CP      (HL)             
+        JP      NZ,TXMTFND       
+
+        LD      HL,TXBASE        
+        CP      (HL)             
+        JP      NZ,TXMTBASE      
+
+        LD      HL,TXTARGET            
+        CP      (HL)                   
+        JP      NZ,TXMTTARGET             
+
+        LD      HL,TXTOWER            
+        CP      (HL)                  
+        JP      NZ,TXMTTOWER           
+
+        LD      HL,PODHIT
+        CP      (HL)
+        JP      NZ,TXPODHITS
+
+        ;-------- ECHO ECNTR STATUS
+
+        LD A,(ESTATUS)          ;GET STATUS TO A FOR TXMT
+        LD HL,ESTATUS           ;CLR (ESTATUS)
+        LD (HL),0
+        OR A                    ;TXMT IF STATUS NON-ZERO
+        JR NZ,OUTRF
+
+        ;------- SEE SYNC & SYNCTIMERS
+        ;(RCVDSYNC)=SMISS SERROR CSYNC PSYNC OR ESYNC
+
+        LD HL,RCVDSYNC
+
+        LD A,SERROR     ;RECVD UNKN DATA IN SLOT 0
+        CP (HL)
+        JR Z,OUTRF
+
+        LD A,SMISS      ;RECVD NO DATA IN SLOT 0
+        CP (HL)
+        JR Z,OUTRF
+
+        LD A,GSYNC
+        CP (HL)
+        JR Z,HNDGSYNC
+
+        LD A,PSYNC      ;RCVD PSYNC IN SLOT 0
+        CP (HL)
+        LD A,PRCVD
+        JR Z,OUTRF
+
+        LD A,ESYNC      ;RECVD ESYNC IN SLOT 0
+        CP (HL)
+        LD A,ERCVD
+        JR Z,OUTRF
+
+HNDGSYNC:
+        LD A,(OBJECT)
+        OR A
+        JR NZ,OUTRF
+
+        LD A,(PODID)
+
+OUTRF:  CALL TXMTRF
+
+        RET                      
+
+
+;-------------------------------
+;         DSYNC TIMER 1            
+;-------------------------------
+
+DSYNC1:
+        ;---- TXMT IF POD TIME SLOT
+        CALL GSYNC1
+
+        ;----- COUNT OUT OF DSYNC
+
+        LD      A,(SLOTCN)
+        CP      66
+        RET     NZ
+
+
+	;10/3/86
+
+	LD	A,(DCNTR)
+	INC	A
+	LD	(DCNTR),A
+
+	LD	HL,DSRPT_TIME
+	CP	(HL)
+
+	RET	C
+
+
+        CALL    TEAM
+        LD      A,GAME
+        LD      (SYSREQ),A
+        RET
+
+;--------------------------------
+;          ESYNC TIMER 1         
+;--------------------------------
+
+ESYNC1:
+        LD      A,(SLOTCN)       
+        CP      66               
+        RET     NZ               
+
+        ;----- ESYNC ALARM
+
+        LD A,EALARM
+        LD (ESTATUS),A
+
+        ;----- INC ECNTR
+        LD      A,(ECNTR)        
+        INC     A                
+        LD      (ECNTR),A        
+        CP      5                
+        JP      Z,INITSYSTEM     
+        RET                      
+
+
+;----------------------------------
+;       TXMT INFO TO SLAVE
+;----------------------------------
+
+TXMTOPP:
+        LD      A,(HL)           
+        LD      (HL),0           
+        CALL    TXMTRF           
+
+        LD      HL,HITOPPONENT   
+        INC     (HL)             
+
+        RET                      
+
+TXMTFND:
+        LD      A,(HL)           
+        LD      (HL),0           
+        CALL    TXMTRF           
+
+        LD      HL,HITFRIEND     
+        INC     (HL)             
+
+        RET                      
+
+TXMTBASE:
+        LD      A,(HL)           
+        LD      (OBJECT),A       
+        LD      (HL),0           
+        CALL    TXMTRF           
+                                 
+        LD      HL,HITOBJECT     
+        SET     0,(HL)           
+                                 
+        RET                      
+
+TXMTTARGET:
+        LD      A,(HL)           
+        LD      (OBJECT),A       
+        LD      (HL),0           
+        CALL    TXMTRF           
+
+        LD      HL,HITOBJECT     
+        SET     1,(HL)           
+                                 
+        RET                      
+
+TXMTTOWER:
+        LD      A,(HL)           
+        LD      (OBJECT),A       
+        LD      (HL),0           
+        CALL    TXMTRF           
+
+        LD      HL,HITOBJECT     
+        SET     2,(HL)           
+        RET                      
+
+TXMTOBJ:
+        LD      A,(HL)           
+        CALL  TXMTRF             
+        RET                      
+
+TXPODHITS:
+        LD A,(PODHIT)
+        AND 0FH
+        OR 0A0H
+        CALL TXMTRF
+
+        XOR A
+        LD (PODHIT),A
+        RET
+
+TXNOSYNC:
+        XOR A
+        CALL TXMTRF
+        RET
+
+
+
+
+
+ 
+;--------------------------------
+;        DO TABLE TASKS          
+;--------------------------------
+
+CLRALL:
+        XOR     A                
+        LD      (TXOPPONENT),A   
+        LD      (TXFRIEND),A     
+        LD      (TXBASE),A       
+        LD      (TXTOWER),A      
+        LD      (TXTARGET),A     
+        LD      (HITOPPONENT),A  
+        LD      (HITFRIEND),A    
+        LD      (HITOBJECT),A    
+        RET                      
+ 
+
+;----- PREGAME
+
+TH_PPP: LD A,(PCNTR)
+        INC A
+        LD (PCNTR),A
+        CP 4
+        RET NZ
+
+        CALL HLMTON
+        LD A,GENTRY
+        LD (TASK),A
+        RET
+
+TH_PPR: XOR A
+        LD (PCNTR),A
+        CALL RESYNC
+        RET
+
+TH_PEG: LD A,(GCNTR)
+        INC A
+        LD (GCNTR),A
+        CP 2
+        RET NZ
+
+        CALL CLRALL
+        CALL TEAM
+        LD A,GAME
+        LD (SYSREQ),A
+        LD A,GSYNC
+        LD (TASK),A
+        RET
+
+TH_PER: XOR A
+        LD (GCNTR),A
+        CALL RESYNC
+        RET
+
+;----- GAME
+
+TH_GGG: RET
+
+TH_GGE: LD A,ESYNC
+        LD (TASK),A
+        RET
+
+TH_GGR: CALL RESYNC
+        RET
+
+TH_GEE: RET
+
+TH_GER: XOR A
+        LD (ECNTR),A
+        CALL RESYNC
+
+        LD A,GSYNC
+        LD (TASK),A
+        RET
+
+
+;---------------------------------
+;       DO DEFAULT TASKS
+;---------------------------------
+
+DF_PP:  XOR A
+        LD (PCNTR),A
+        RET
+
+DF_PE:  XOR A
+        LD (GCNTR),A
+        RET
+
+DF_GG:  RET
+
+DF_GD:  XOR A
+        LD (DCNTR),A
+
+        LD A,GSYNC
+        LD (TASK),A
+        RET
+
+DF_GE:  XOR A
+        LD (ECNTR),A
+        CALL CLRALL
+
+        LD A,GSYNC
+        LD (TASK),A
+
+        RET
+
+DF_DG:  NOP
+DF_DD:  LD A,DSYNC
+        LD (TASK),A
+        RET
+
+;--------------------------------
+;        GAME SOUNDS             
+;--------------------------------          
+
+BACKGND:
+        PUSH    AF               
+        PUSH    BC               
+        PUSH    DE               
+        PUSH    HL               
+        LD      BC,0380H         
+        LD      DE,0090H         
+        LD      HL,0800H         
+        JP      SOUND            
+
+GOODHIT:
+        PUSH    AF               
+        PUSH    BC              ;GOOD HIT SOUND
+        PUSH    DE               
+        PUSH    HL               
+        LD      BC,0180H         
+        LD      DE,0060H         
+        LD      HL,9C02H         
+        CALL    SETSND           
+        POP     HL               
+        POP     DE               
+        LD      BC,0600H         
+DEL25:  DEC     C                
+        LD      A,C              
+        OR      A                
+        JP      NZ,DEL25         
+        DEC     B                
+        LD      A,B              
+        OR      A                
+        JP      NZ,DEL25         
+                                 
+        POP     BC               
+        XOR     A                
+        OUT     (PTBS),A         
+        POP     AF               
+        RET                      
+
+MISS:
+        PUSH    AF               
+        PUSH    BC               
+        PUSH    DE               
+        PUSH    HL               
+        LD      BC,0200H         
+        LD      DE,0040H         
+        LD      HL,0CC00H        
+	JP	SOUND
+
+HITOWN:                                
+        PUSH    AF               
+        PUSH    BC                
+        PUSH    DE                
+        PUSH    HL               
+        LD      BC,0180H         
+        LD      DE,0090H         
+        LD      HL,0EC00H        
+        JP      SOUND            
+
+IMHIT:                                
+        PUSH    AF               
+        PUSH    BC               
+        PUSH    DE               
+        PUSH    HL               
+        LD      BC,0110H         
+        LD      DE,0090H         
+        LD      HL,0AA00H        
+        JP      SOUND            
+
+
+SOUND:                             
+        CALL    SETSND           
+        POP     HL               
+        POP     DE               
+        POP     BC               
+        POP     AF               
+        RET                      
+
+;-------  GAME SOUND SUPPORT SUB  --------
+
+SETSND:                              
+        OUT     (STPT0S),A       
+        OUT     (STPT1S),A       
+        LD      A,03H            
+        OUT     (PTBS),A         
+        XOR     A                
+        OUT     (PTAS),A         
+        LD      A,C              
+        OUT     (T0LSBS),A       
+        LD      A,B              
+        OUT     (T0MSBS),A       
+        LD      A,E              
+        OUT     (T1LSBS),A       
+        LD      A,D              
+        OUT     (T1MSBS),A       
+        LD      A,H              
+        OUT     (PTAS),A         
+        OUT     (STRT0S),A       
+        OUT     (STRT1S),A        
+        LD      A,L              
+        OUT     (PTBS),A         
+        RET                      
+
+;--------------------------------        
+;         RESET RF UART         
+;--------------------------------          
+
+RSTRF:
+        PUSH    AF
+        LD      A,(IO)
+        SET     3,A             ;RESET RFMR
+        RES     2,A             ;RESET RFRDA
+        LD      (CONTROL),A
+        LD      A,(IO)
+        LD      (CONTROL),A     ;TURN BIT 2 LOW  
+        POP     AF
+        RET
+
+;--------------------------------        
+;        TRANSMITTER ON         
+;--------------------------------         
+
+TXMTON:
+        PUSH    AF
+        LD      A,(IO)
+        AND     0EFH
+        LD      (CONTROL),A
+        LD      (IO),A
+        POP     AF
+        RET
+
+;--------------------------------        
+;         TRANSMITTER OFF       
+;--------------------------------          
+
+TXMTOFF:
+        PUSH    AF
+        LD      A,(IO)
+        OR      10H             ;TURN BIT 4 ON                     
+        LD      (CONTROL),A
+        LD      (IO),A
+        POP     AF
+        RET
+
+;--------------------------------        
+;          RECEIVE RF           
+;--------------------------------         
+
+RCVRF: 
+        LD      A,(RECVRF)
+        LD      (RFDATA),A
+
+        RET
+
+;--------------------------------         
+;          TXMT RF              
+;--------------------------------         
+
+TXMTRF:
+        CALL    DELAY2
+        LD      (XMITRF),A
+        RET
+ 
+;--------------------------------        
+;         HELMET ON             
+;--------------------------------         
+ 
+HLMTON:
+        LD      A,(IO)           
+        AND     0FEH             
+        LD      (IO),A            
+        LD      (CONTROL),A      
+        RET                      
+ 
+;--------------------------------         
+;      ENABLE STUN LEDS          
+;--------------------------------           
+ 
+STUN:
+        LD      A,(IO)           
+        OR      040H             
+        LD      (IO),A           
+        LD      (CONTROL),A      
+        RET                      
+ 
+;--------------------------------         
+;       ENABLE TEAM LEDS         
+;--------------------------------          
+ 
+TEAM:
+        LD      A,(IO)           
+        AND     0BFH             
+        LD      (IO),A           
+        LD      (CONTROL),A      
+        RET                      
+ 
+;--------------------------------         
+;           IR RESET             
+;--------------------------------          
+                                 
+IRRST:
+        PUSH    AF               
+        LD      A,(IO)            
+        AND     0DFH             
+        LD      (CONTROL),A      
+        LD      A,(IO)           
+        LD      (CONTROL),A      
+        POP     AF               
+        RET                      
+
+;--------------------------------         
+;          POD IR OFF            
+;--------------------------------           
+
+IROFF:
+        PUSH    AF               
+        LD      A,(IO)           
+        AND     07FH             
+        LD      (CONTROL),A      
+        LD      (IO),A           
+        POP     AF               
+        RET                      
+
+;--------------------------------         
+;           POD IR ON            
+;--------------------------------          
+
+IRON:
+        PUSH    AF               
+        LD      A,(IO)            
+        OR      080H             
+        LD      (CONTROL),A      
+        LD      (IO),A           
+        POP     AF               
+        RET                      
+
+;--------------------------------           
+;            DELAYS              
+;--------------------------------           
+
+DEL1K:  PUSH    BC               
+        PUSH    AF               
+        LD      BC,09D82H        
+        JP      DELAY            
+                                 
+DEL12:  PUSH    BC               
+        PUSH    AF                
+        LD      BC,01F0H         
+        JP      DELAY            
+
+DELAY2: PUSH    BC                  
+        PUSH    AF                   
+        LD      BC,004FH              
+        JP      DELAY                  
+
+DELAY4: PUSH    BC               
+        PUSH    AF               
+        LD      BC,009EH         
+DELAY:  XOR     A                
+DECLO:  CP      C                
+        JP      Z,DECHI          
+        DEC     BC               
+        JP      DECLO            
+DECHI:  CP      B                
+        JP      Z,POPOP          
+        DEC     BC               
+        JP      DECLO            
+POPOP:  POP     AF               
+        POP     BC                
+        RET                                                         
+
+;---------------------------------------  
+;             TABLE SEARCH                
+;---------------------------------------  
+;ENTRY: A SEARCH ELEMENT                  
+;       HL CONTAINS TABLE ADDRESS         
+;EXIT:  IF ELEMENT FOUND IN TABLE, RETS   
+;       WITH CF CLEARED & ELEMENT IN A    
+;       IF ELEMENT NOT FOUND, RETS WITH   
+;       CF SET & ELEMENT IN A             
+;---------------------------------------- 
+ 
+TBLSEARCH:
+        LD      B,(HL)          ;TBL LENGTH IN B
+TS1:    INC     HL               
+        CP      (HL)             
+        RET     Z               ;ELEMENT FOUND            
+        DJNZ    TS1              
+        SCF                      
+        RET                     ;ELEMENT NOT FOUND        
+
+
+;10/2/86
+;---------------------------------------------
+;	SET DISRUPT TIME
+;---------------------------------------------
+
+GET_DISRUPT:
+
+	;variable for public only
+
+	LD HL,DSRPT_TIME
+	LD (HL),5
+
+	LD A,(GAMETYPE)
+	CP PUBIC
+
+	RET NZ
+
+	;vary disrupt
+
+	CALL	GD1
+	CALL NC,GD2
+
+	LD HL,DSRPT_TIME
+	LD (HL),C
+
+	RET C		;disrupt time set via tables
+
+	;set default disruption time
+
+	LD (HL),5
+
+	RET
+
+
+	;	HANDLE HITS_IN > HITS_OUT
+	;	--------------------------
+
+GD1:
+	XOR A
+	LD A,(HITS_OUT)
+	LD HL,HITS_IN
+	CP (HL)
+	RET NC			;HITS_IN not > HITS_OUT
+
+	LD A,(HITS_IN)
+	LD HL,HITS_OUT
+	SUB (HL)
+
+	LD HL,GD2_TBL
+	CALL GD0
+
+	RET
+
+
+
+;	HANDLE HITS_OUT > HITS_IN
+;	--------------------------
+
+GD2:
+	XOR A
+	LD A,(HITS_IN)
+	LD HL,HITS_OUT
+	CP (HL)
+	RET NC			;HITS_OUT  not > HITS_IN
+
+	LD A,(HITS_OUT)
+	LD HL,HITS_IN
+	SUB (HL)
+
+	LD HL,GD1_TBL
+	CALL GD0
+	RET
+
+
+;	SEARCH (HL) TABLE
+;	-----------------
+
+GD0:
+	LD D,A
+	LD B,(HL)
+GD0_1:
+	INC HL
+
+	LD A,(HL)
+	CP D
+
+	INC HL
+	LD C,(HL)
+
+	RET C
+
+	DJNZ GD0_1
+
+
+GD1_TBL:
+	DB	5
+
+	DB	110
+	DB	9
+
+	DB	80
+	DB	8
+
+	DB	50
+	DB	7
+
+	DB	20
+	DB	6
+
+	DB	0
+	DB	5
+
+
+GD2_TBL:
+
+	DB	5
+
+	DB	20
+	DB	1
+
+	DB	15
+	DB	2
+
+	DB	10
+	DB	3
+
+	DB	5
+	DB	4
+
+	DB	0
+	DB	5
+
+
+
+
+;******************************************************************
+ 
+        ;RED GROUP ALPHA CONFIGURATION IS      01XXXXX0
+        ;RED GROUP OMEGA CONFIGURATION IS      01XXXXX1
+        ;GREEN GROUP ALPHA CONFIGURATION IS    10XXXXX0
+        ;GREEN GROUP OMEGA CONFIGURATION IS    10XXXXX1
+        ;OBJECTS GROUP ALL CONFIGURATION IS    00XXXXXX
+        ;COMMAND GROUP ALL CONFIGURATION IS    11XXXXXX
+
+CODETBL:
+        DB      47             ;NO. OF TABLE ENTRYS    
+	DB      RBASE,GBASE,RTOWER,GTOWER,TARGET,RBASE2,GBASE2
+        DB      42H,44H,46H,48H,4AH,4CH,4EH,50H,52H,54H
+        DB      80H,82H,84H,86H,88H,8AH,8CH,8EH,90H,92H   
+        DB      43H,45H,47H,49H,4BH,4DH,4FH,51H,53H,55H
+        DB      81H,83H,85H,87H,89H,8BH,8DH,8FH,91H,93H
+
+
+SYNCTBL:
+        DB      3                ;NO. OF TABLE ENTRYS
+        DB      PSYNC,GSYNC,ESYNC 
+
+
+        ;-----------------------------
+        ;       POD ID NUMBER
+        ;-----------------------------
+                ORG 0FFFH
+PODID:  DB 0FFH         ;POD 1
+        END
+
+
+

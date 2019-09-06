@@ -1,0 +1,12 @@
+
+
+10-6-86 DSe
+	changed EQUATES notes to reflect change 20h = beta to C0h = beta
+
+	copied SPOD13 to SPOD14
+
+	change logic decision for BETA_ACTION from 20h to C0h
+
+
+
+
